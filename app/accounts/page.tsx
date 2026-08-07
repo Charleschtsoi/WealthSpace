@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AccountsSpreadsheet } from "@/components/accounts/AccountsSpreadsheet";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,12 @@ export default function AccountsPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
           Update bank, brokerage, crypto, and cash balances in a spreadsheet.
-          Designed for quick edits — paste from Sheets, save once.
+          Designed for quick edits — paste from Sheets, save once. Edit positions
+          on{" "}
+          <Link href="/holdings" className="underline underline-offset-2">
+            Holdings
+          </Link>
+          .
         </p>
       </header>
       <AccountsSpreadsheet />

@@ -16,6 +16,7 @@ Personal wealth management and investment advisory dashboard (MVP).
 |------|--------|
 | Dashboard (net worth, charts, holdings) | ✅ |
 | Spreadsheet accounts editor (`/accounts`) | ✅ |
+| Spreadsheet holdings editor (`/holdings`) | ✅ |
 | BYOK AI settings (`/settings`) | ✅ |
 | CSV + manual balance ingestion UI | ✅ |
 | Weekly AI Advisor UI + `/api/chat` | ✅ |
@@ -56,6 +57,7 @@ Open [http://localhost:3000](http://localhost:3000).
 |------|-------------|
 | `/` | Net worth summary, line chart, allocation donut, holdings |
 | `/accounts` | Sheets-like accounts editor |
+| `/holdings` | Sheets-like holdings editor (qty / prices / MV) |
 | `/upload` | CSV ingestion + manual balance updates |
 | `/advisor` | Weekly AI rebalancing plan |
 | `/settings` | BYOK AI provider settings |
