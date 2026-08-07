@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { AccountType, TransactionType } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 
 export type ActionResult = {
   success: boolean;
@@ -76,6 +76,15 @@ export async function ingestCsvTransactions(
 ): Promise<ActionResult> {
   if (!rows.length) {
     return { success: false, message: "No rows found in CSV." };
+  }
+
+  const prisma = getPrisma();
+  if (!prisma) {
+    return {
+      success: false,
+      message:
+        "DATABASE_URL is not configured. Preview the CSV here, then add a Postgres URL in Vercel to persist imports.",
+    };
   }
 
   try {
@@ -158,6 +167,15 @@ export async function updateAccountBalance(input: {
   }
   if (Number.isNaN(balance)) {
     return { success: false, message: "Balance must be a valid number." };
+  }
+
+  const prisma = getPrisma();
+  if (!prisma) {
+    return {
+      success: false,
+      message:
+        "DATABASE_URL is not configured. Add a Postgres URL in Vercel to save balances.",
+    };
   }
 
   try {

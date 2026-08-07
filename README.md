@@ -1,31 +1,55 @@
 # WealthSpace
 
-Personal wealth management and investment advisory dashboard.
+Personal wealth management and investment advisory dashboard (MVP).
 
 ## Stack
 
 - **Next.js 14** (App Router) + TypeScript
-- **PostgreSQL** via **Prisma**
+- **PostgreSQL** via **Prisma** (optional for MVP — placeholder data works without it)
 - **Tailwind CSS** + Shadcn-style UI primitives
 - **Recharts** for net-worth and allocation charts
 - **Vercel AI SDK** (`ai` + `@ai-sdk/openai`) for the weekly advisor
 
-## Getting started
+## MVP scope
+
+| Area | Status |
+|------|--------|
+| Dashboard (net worth, charts, holdings) | ✅ |
+| CSV + manual balance ingestion UI | ✅ |
+| Weekly AI Advisor UI + `/api/chat` | ✅ |
+| Demo/placeholder data without DB | ✅ |
+| Persist to Postgres | Optional — set `DATABASE_URL` |
+| Live OpenAI advice | Optional — set `OPENAI_API_KEY` |
+
+## Deploy on Vercel
+
+1. Import [Charleschtsoi/WealthSpace](https://github.com/Charleschtsoi/WealthSpace) into Vercel (Production branch: `main`).
+2. Optional env vars:
+   - `DATABASE_URL` — Postgres connection string (Neon/Supabase/etc.)
+   - `OPENAI_API_KEY` — enables Weekly AI Advisor
+3. Deploy. Without env vars the site still loads with demo portfolio data.
+
+If you previously saw `404: NOT_FOUND` on `wealth-space.vercel.app`, Production was pointing at an empty `main`. Redeploy after this MVP lands on `main`.
+
+Local DB after deploy (optional):
+
+```bash
+npx prisma db push
+npm run db:seed
+```
+
+## Getting started (local)
 
 ```bash
 cp .env.example .env
-# Set DATABASE_URL and OPENAI_API_KEY
+# Optionally set DATABASE_URL and OPENAI_API_KEY
 
 npm install
 npx prisma generate
-npx prisma db push
-npm run db:seed
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
-
-Without a database, the dashboard and advisor still render using built-in placeholder portfolio data.
 
 ## Routes
 

@@ -2,12 +2,14 @@ import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/dashboard/HoldingsTable";
+import { MvpBanner } from "@/components/MvpBanner";
 import { getDashboardData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { metrics, snapshots, holdings } = await getDashboardData();
+  const { metrics, snapshots, holdings, usingPlaceholderData } =
+    await getDashboardData();
 
   return (
     <div className="space-y-8">
@@ -24,6 +26,8 @@ export default async function DashboardPage() {
           snapshots so the UI renders immediately.
         </p>
       </header>
+
+      <MvpBanner usingPlaceholderData={usingPlaceholderData} />
 
       <SummaryCards
         totalNetWorth={metrics.totalNetWorth}
