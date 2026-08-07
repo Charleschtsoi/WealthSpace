@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -25,9 +26,17 @@ type HoldingsTableProps = {
 export function HoldingsTable({ holdings }: HoldingsTableProps) {
   return (
     <Card className="animate-fade-up border-border/80 bg-card/80 backdrop-blur [animation-delay:320ms]">
-      <CardHeader>
-        <CardTitle className="font-display text-xl">Equity Holdings</CardTitle>
-        <CardDescription>Brokerage positions with market value</CardDescription>
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <CardTitle className="font-display text-xl">Equity Holdings</CardTitle>
+          <CardDescription>Brokerage positions with market value</CardDescription>
+        </div>
+        <Link
+          href="/holdings"
+          className="text-sm text-primary underline-offset-2 hover:underline"
+        >
+          Edit in spreadsheet
+        </Link>
       </CardHeader>
       <CardContent>
         <Table>
