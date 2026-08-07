@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { Sparkles, RefreshCw, AlertTriangle } from "lucide-react";
+import { Sparkles, RefreshCw, AlertTriangle, KeyRound } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -12,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getByokPublicStatus, loadByokSettings } from "@/lib/byok";
 
 type AdvisorChatProps = {
   portfolioJson: string;
@@ -39,12 +41,37 @@ function messageText(message: {
 
 export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
   const [started, setStarted] = useState(false);
+  const [byokConfigured, setByokConfigured] = useState(false);
+  const [byokHint, setByokHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    const status = getByokPublicStatus();
+    setByokConfigured(status.configured);
+    setByokHint(
+      status.configured
+        ? `${status.provider} · ${status.model} · ${status.keyHint}`
+        : null
+    );
+  }, []);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { portfolio: portfolioJson },
+        body: () => {
+          const byok = loadByokSettings();
+          return {
+            portfolio: portfolioJson,
+            byok: byok
+              ? {
+                  provider: byok.provider,
+                  model: byok.model,
+                  apiKey: byok.apiKey,
+                  baseUrl: byok.baseUrl,
+                }
+              : undefined,
+          };
+        },
       }),
     [portfolioJson]
   );
@@ -78,6 +105,23 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
               (NVDA, META). Portfolio holdings and accounts are sent as JSON to
               the advisor endpoint.
             </CardDescription>
+            <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <KeyRound className="h-3.5 w-3.5" />
+              {byokConfigured ? (
+                <span>Using your BYOK key · {byokHint}</span>
+              ) : (
+                <span>
+                  No BYOK key yet —{" "}
+                  <Link
+                    href="/settings"
+                    className="underline underline-offset-2"
+                  >
+                    configure Settings
+                  </Link>{" "}
+                  or rely on server env fallback.
+                </span>
+              )}
+            </p>
           </div>
           <Button onClick={generatePlan} disabled={isLoading} className="shrink-0">
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -102,8 +146,15 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
           <div>
             <p className="font-medium">Advisor request failed</p>
             <p className="mt-1 text-muted-foreground">
-              {error.message ||
-                "Check that OPENAI_API_KEY is set in your environment."}
+              {error.message || (
+                <>
+                  Add your key in{" "}
+                  <Link href="/settings" className="underline">
+                    Settings (BYOK)
+                  </Link>{" "}
+                  or set a server API key.
+                </>
+              )}
             </p>
           </div>
         </div>

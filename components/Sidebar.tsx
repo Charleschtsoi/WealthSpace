@@ -9,6 +9,8 @@ import {
   Landmark,
   Menu,
   X,
+  Table2,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -16,8 +18,10 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/accounts", label: "Accounts", icon: Table2 },
   { href: "/upload", label: "Data Ingestion", icon: Upload },
   { href: "/advisor", label: "AI Advisor", icon: Sparkles },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {

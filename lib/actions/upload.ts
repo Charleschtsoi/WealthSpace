@@ -28,6 +28,14 @@ function inferAccountType(name: string): AccountType {
     return AccountType.REAL_ESTATE;
   }
   if (
+    lower.includes("crypto") ||
+    lower.includes("binance") ||
+    lower.includes("coinbase") ||
+    lower.includes("okx")
+  ) {
+    return AccountType.CRYPTO;
+  }
+  if (
     lower.includes("cash") ||
     lower.includes("bank") ||
     lower.includes("hang seng") ||

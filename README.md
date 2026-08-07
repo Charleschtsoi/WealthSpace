@@ -15,27 +15,26 @@ Personal wealth management and investment advisory dashboard (MVP).
 | Area | Status |
 |------|--------|
 | Dashboard (net worth, charts, holdings) | ✅ |
+| Spreadsheet accounts editor (`/accounts`) | ✅ |
+| BYOK AI settings (`/settings`) | ✅ |
 | CSV + manual balance ingestion UI | ✅ |
 | Weekly AI Advisor UI + `/api/chat` | ✅ |
 | Demo/placeholder data without DB | ✅ |
 | Persist to Postgres | Optional — set `DATABASE_URL` |
-| Live OpenAI advice | Optional — set `OPENAI_API_KEY` |
+| Live OpenAI/Anthropic advice | BYOK in Settings, or server env keys |
 
 ## Deploy on Vercel
 
 1. Import [Charleschtsoi/WealthSpace](https://github.com/Charleschtsoi/WealthSpace) into Vercel (Production branch: `main`).
 2. Optional env vars:
    - `DATABASE_URL` — Postgres connection string (Neon/Supabase/etc.)
-   - `OPENAI_API_KEY` — enables Weekly AI Advisor
-3. Deploy. Without env vars the site still loads with demo portfolio data.
+   - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — demo fallback if user has no BYOK key
+3. Deploy. Without env vars the site still loads with demo portfolio data. Users can add their own AI key under **Settings**.
 
-If you previously saw `404: NOT_FOUND` on `wealth-space.vercel.app`, Production was pointing at an empty `main`. Redeploy after this MVP lands on `main`.
-
-Local DB after deploy (optional):
+After schema changes (e.g. `CRYPTO`, `notes`), run:
 
 ```bash
 npx prisma db push
-npm run db:seed
 ```
 
 ## Getting started (local)
@@ -56,9 +55,12 @@ Open [http://localhost:3000](http://localhost:3000).
 | Path | Description |
 |------|-------------|
 | `/` | Net worth summary, line chart, allocation donut, holdings |
+| `/accounts` | Sheets-like accounts editor |
 | `/upload` | CSV ingestion + manual balance updates |
 | `/advisor` | Weekly AI rebalancing plan |
+| `/settings` | BYOK AI provider settings |
 | `/api/chat` | Streaming advisor endpoint |
+| `/api/ai/test` | BYOK connection test |
 
 ## CSV format
 

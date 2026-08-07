@@ -13,6 +13,7 @@ datasource db {
 enum AccountType {
   CASH
   BROKERAGE
+  CRYPTO
   REAL_ESTATE
 }
 
@@ -29,6 +30,7 @@ model Account {
   type        AccountType
   balance     Decimal          @db.Decimal(18, 2)
   currency    String           @default("USD")
+  notes       String?
   lastUpdated DateTime         @default(now())
   createdAt   DateTime         @default(now())
   holdings    AssetHolding[]

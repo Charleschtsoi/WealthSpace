@@ -49,7 +49,7 @@ type PreviewRow = {
   Currency: string;
 };
 
-type AccountTypeOption = "CASH" | "BROKERAGE" | "REAL_ESTATE";
+type AccountTypeOption = "CASH" | "BROKERAGE" | "CRYPTO" | "REAL_ESTATE";
 
 const SAMPLE_CSV = `Date,Account,Ticker/Description,Amount,Currency
 2026-08-01,Firstrade,BUY VOO,2500,USD
@@ -272,6 +272,7 @@ export function DataUploader() {
                 <SelectContent>
                   <SelectItem value="CASH">Cash</SelectItem>
                   <SelectItem value="BROKERAGE">Brokerage</SelectItem>
+                  <SelectItem value="CRYPTO">Crypto</SelectItem>
                   <SelectItem value="REAL_ESTATE">Real estate</SelectItem>
                 </SelectContent>
               </Select>

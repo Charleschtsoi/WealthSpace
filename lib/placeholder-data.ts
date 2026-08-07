@@ -1,7 +1,7 @@
 export type PlaceholderAccount = {
   id: string;
   name: string;
-  type: "CASH" | "BROKERAGE" | "REAL_ESTATE";
+  type: "CASH" | "BROKERAGE" | "CRYPTO" | "REAL_ESTATE";
   balance: number;
   currency: string;
   lastUpdated: string;
