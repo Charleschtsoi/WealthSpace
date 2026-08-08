@@ -188,6 +188,7 @@ export async function saveAccountsBatch(
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
     revalidatePath("/accounts");
     revalidatePath("/advisor");
     revalidatePath("/upload");
