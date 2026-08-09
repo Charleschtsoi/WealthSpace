@@ -8,14 +8,21 @@ import {
   Upload,
   History,
   Keyboard,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountsSpreadsheet } from "@/components/accounts/AccountsSpreadsheet";
 import { HoldingsSpreadsheet } from "@/components/holdings/HoldingsSpreadsheet";
+import { TransactionsSpreadsheet } from "@/components/transactions/TransactionsSpreadsheet";
 import { DataUploader } from "@/components/DataUploader";
 import { MoneyHistory } from "@/components/money/MoneyHistory";
 
-export type MoneyTab = "accounts" | "holdings" | "import" | "history";
+export type MoneyTab =
+  | "accounts"
+  | "holdings"
+  | "transactions"
+  | "import"
+  | "history";
 
 const TABS: {
   id: MoneyTab;
@@ -36,6 +43,12 @@ const TABS: {
     description: "Positions & prices",
   },
   {
+    id: "transactions",
+    label: "Transactions",
+    icon: ArrowLeftRight,
+    description: "Cashflow ledger",
+  },
+  {
     id: "import",
     label: "Import",
     icon: Upload,
@@ -50,7 +63,12 @@ const TABS: {
 ];
 
 function parseTab(value: string | null): MoneyTab {
-  if (value === "holdings" || value === "import" || value === "history") {
+  if (
+    value === "holdings" ||
+    value === "transactions" ||
+    value === "import" ||
+    value === "history"
+  ) {
     return value;
   }
   return "accounts";
@@ -130,6 +148,7 @@ export function MoneyWorkspace() {
       <div role="tabpanel" className="min-h-[320px]">
         {tab === "accounts" && <AccountsSpreadsheet embedded />}
         {tab === "holdings" && <HoldingsSpreadsheet embedded />}
+        {tab === "transactions" && <TransactionsSpreadsheet embedded />}
         {tab === "import" && <DataUploader embedded />}
         {tab === "history" && <MoneyHistory />}
       </div>

@@ -42,8 +42,8 @@ export function MoneyHistory() {
             Recent money activity
           </CardTitle>
           <CardDescription className="mt-2 max-w-2xl">
-            Saves and imports from this browser. Full transaction ledger editing
-            lands in WS-28.
+            Saves and imports from this browser — accounts, holdings,
+            transactions, and CSV import.
           </CardDescription>
         </div>
         {items.length > 0 && (
@@ -64,8 +64,8 @@ export function MoneyHistory() {
       <CardContent>
         {items.length === 0 ? (
           <p className="rounded-md border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-            No saves or imports yet. Edit Accounts or Holdings and Save, or use
-            Import.
+            No saves or imports yet. Edit Accounts, Holdings, or Transactions
+            and Save, or use Import.
           </p>
         ) : (
           <ul className="divide-y divide-border rounded-md border border-border">
