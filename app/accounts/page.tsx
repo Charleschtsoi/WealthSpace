@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { AccountsSpreadsheet } from "@/components/accounts/AccountsSpreadsheet";
+import { DataModeBanner } from "@/components/DataModeBanner";
+import { getDashboardData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
-export default function AccountsPage() {
+export default async function AccountsPage() {
+  const { preference, usingDemoData, isLive, databaseConfigured } =
+    await getDashboardData();
+
   return (
     <div className="space-y-8">
       <header className="animate-fade-up space-y-2">
@@ -23,6 +28,12 @@ export default function AccountsPage() {
           .
         </p>
       </header>
+      <DataModeBanner
+        preference={preference}
+        usingDemoData={usingDemoData}
+        isLive={isLive}
+        databaseConfigured={databaseConfigured}
+      />
       <AccountsSpreadsheet />
     </div>
   );

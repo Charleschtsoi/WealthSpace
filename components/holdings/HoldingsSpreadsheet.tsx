@@ -43,6 +43,7 @@ import {
   getHoldingsForEditor,
   saveHoldingsBatch,
 } from "@/lib/actions/holdings";
+import { getDataModeMeta } from "@/lib/actions/demo-mode";
 import { PLACEHOLDER_HOLDINGS } from "@/lib/placeholder-data";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -85,9 +86,10 @@ export function HoldingsSpreadsheet() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [remoteHoldings, remoteAccounts] = await Promise.all([
+      const [remoteHoldings, remoteAccounts, modeMeta] = await Promise.all([
         getHoldingsForEditor(),
         getAccountOptionsForHoldings(),
+        getDataModeMeta(),
       ]);
       if (cancelled) return;
 
@@ -108,6 +110,13 @@ export function HoldingsSpreadsheet() {
         if (local?.length) {
           setRows(toEditorRows(local));
           setStatus("Loaded holdings saved in this browser.");
+        } else if (modeMeta.preference === "personal") {
+          setRows([createEmptyHoldingRow(defaultAccount)]);
+          setStatus(
+            accountOptions.length
+              ? "Personal ledger — add positions and Save."
+              : "Create an account on Accounts first, then add holdings here."
+          );
         } else {
           setRows(
             PLACEHOLDER_HOLDINGS.map((h) => ({

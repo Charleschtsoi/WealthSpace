@@ -40,6 +40,7 @@ import {
   getAccountsForEditor,
   saveAccountsBatch,
 } from "@/lib/actions/accounts";
+import { getDataModeMeta } from "@/lib/actions/demo-mode";
 import { PLACEHOLDER_ACCOUNTS } from "@/lib/placeholder-data";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +66,10 @@ export function AccountsSpreadsheet({ initialRows = [] }: Props) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const remote = await getAccountsForEditor();
+      const [remote, modeMeta] = await Promise.all([
+        getAccountsForEditor(),
+        getDataModeMeta(),
+      ]);
       if (cancelled) return;
 
       if (remote.fromDb && remote.rows.length) {
@@ -77,6 +81,13 @@ export function AccountsSpreadsheet({ initialRows = [] }: Props) {
           setStatus("Loaded accounts saved in this browser.");
         } else if (initialRows.length) {
           setRows(toEditorRows(initialRows));
+        } else if (modeMeta.preference === "personal") {
+          setRows([createEmptyAccountRow()]);
+          setStatus(
+            modeMeta.databaseConfigured
+              ? "Personal ledger — add your first account and Save."
+              : "Personal ledger (local) — add your first account. Set DATABASE_URL to persist in Postgres."
+          );
         } else {
           setRows(
             PLACEHOLDER_ACCOUNTS.map((a) => ({

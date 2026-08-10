@@ -2,14 +2,21 @@ import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/dashboard/HoldingsTable";
-import { MvpBanner } from "@/components/MvpBanner";
+import { DataModeBanner } from "@/components/DataModeBanner";
 import { getDashboardData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { metrics, snapshots, holdings, usingPlaceholderData } =
-    await getDashboardData();
+  const {
+    metrics,
+    snapshots,
+    holdings,
+    preference,
+    usingDemoData,
+    isLive,
+    databaseConfigured,
+  } = await getDashboardData();
 
   return (
     <div className="space-y-8">
@@ -22,12 +29,17 @@ export default async function DashboardPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
           Institutional-grade view of net worth, liquidity, and allocation.
-          Charts use live database data when available, otherwise placeholder
-          snapshots so the UI renders immediately.
+          Demo sample data is labeled clearly until you start a personal ledger
+          or connect Postgres.
         </p>
       </header>
 
-      <MvpBanner usingPlaceholderData={usingPlaceholderData} />
+      <DataModeBanner
+        preference={preference}
+        usingDemoData={usingDemoData}
+        isLive={isLive}
+        databaseConfigured={databaseConfigured}
+      />
 
       <SummaryCards
         totalNetWorth={metrics.totalNetWorth}
