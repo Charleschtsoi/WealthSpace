@@ -22,12 +22,14 @@ export default async function DashboardPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
           Institutional-grade view of net worth, liquidity, and allocation.
-          Charts use live database data when available, otherwise placeholder
-          snapshots so the UI renders immediately.
+          Numbers come from Postgres when seeded; otherwise the demo profile
+          keeps the UI usable without a database.
         </p>
       </header>
 
-      <MvpBanner usingPlaceholderData={usingPlaceholderData} />
+      {usingPlaceholderData ? (
+        <MvpBanner usingPlaceholderData />
+      ) : null}
 
       <SummaryCards
         totalNetWorth={metrics.totalNetWorth}
