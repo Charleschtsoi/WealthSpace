@@ -10,8 +10,14 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:reset": "tsx prisma/seed.ts --reset",
+    "db:setup": "prisma db push && tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.34",
     "@ai-sdk/openai": "^4.0.34",

@@ -21,6 +21,7 @@ Personal wealth management and investment advisory dashboard (MVP).
 | CSV + manual balance ingestion UI | ✅ |
 | Weekly AI Advisor UI + `/api/chat` | ✅ |
 | Demo/placeholder data without DB | ✅ |
+| Postgres seed (Hang Seng / Firstrade / Property) | ✅ — `npm run db:setup` |
 | Persist to Postgres | Optional — set `DATABASE_URL` |
 | Live OpenAI/Anthropic advice | BYOK in Settings, or server env keys |
 
@@ -31,11 +32,11 @@ Personal wealth management and investment advisory dashboard (MVP).
    - `DATABASE_URL` — Postgres connection string (Neon/Supabase/etc.)
    - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — demo fallback if user has no BYOK key
 3. Deploy. Without env vars the site still loads with demo portfolio data. Users can add their own AI key under **Settings**.
-
-After schema changes (e.g. `CRYPTO`, `notes`), run:
+4. After first deploy with `DATABASE_URL`, run schema push + seed once (Vercel CLI, Neon SQL, or any machine with the same URL):
 
 ```bash
 npx prisma db push
+npm run db:seed
 ```
 
 ## Getting started (local)
@@ -50,6 +51,26 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Postgres (live dashboard data)
+
+Without `DATABASE_URL`, the dashboard uses built-in placeholders and shows a demo banner.
+
+With a local Postgres database:
+
+```bash
+# 1. Put a connection string in .env (see .env.example)
+# 2. Push schema + seed Hang Seng / Firstrade / Property profile
+npm run db:setup
+
+# Idempotent re-seed (safe to re-run)
+npm run db:seed
+
+# Destructive wipe + re-seed
+npm run db:seed:reset
+```
+
+`db:setup` runs `prisma db push` then the seed. The seed upserts **Accounts**, **Holdings**, **Transactions**, and **NetWorthSnapshots**. When those tables are populated, the dashboard reads from Postgres and the demo banner is hidden.
 
 ## Routes
 
