@@ -71,11 +71,11 @@ export function DataModeSettings({
           </li>
           <li>
             Add accounts on{" "}
-            <Link href="/accounts" className="underline underline-offset-2">
+            <Link href="/money?tab=accounts" className="underline underline-offset-2">
               Accounts
             </Link>
             , then holdings on{" "}
-            <Link href="/holdings" className="underline underline-offset-2">
+            <Link href="/money?tab=holdings" className="underline underline-offset-2">
               Holdings
             </Link>
             .
