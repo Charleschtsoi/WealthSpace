@@ -2,6 +2,17 @@
   "name": "wealthspace",
   "version": "0.1.0",
   "private": true,
+  "description": "Personal wealth dashboard with spreadsheet money tracking and optional AI advisory",
+  "author": "Charles Tsoi <charleschtsoi@gmail.com> (https://github.com/Charleschtsoi)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Charleschtsoi/WealthSpace.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Charleschtsoi/WealthSpace/issues"
+  },
+  "homepage": "https://github.com/Charleschtsoi/WealthSpace#readme",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
