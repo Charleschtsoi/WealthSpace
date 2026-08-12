@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { AccountType } from "@prisma/client";
 import { getPrisma } from "@/lib/prisma";
 import { isPhantomPlaceholderId } from "@/lib/demo-mode";
+import { recordNetWorthSnapshot } from "@/lib/net-worth-snapshot";
 import type { AccountRow, AccountTypeOption } from "@/lib/accounts-sheet";
 
 export type SaveAccountsResult = {
@@ -195,6 +196,8 @@ export async function saveAccountsBatch(
         }
       }
     }
+
+    await recordNetWorthSnapshot(prisma);
 
     revalidatePath("/");
     revalidatePath("/money");

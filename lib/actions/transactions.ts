@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { TransactionType } from "@prisma/client";
 import { getPrisma } from "@/lib/prisma";
+import { recordNetWorthSnapshot } from "@/lib/net-worth-snapshot";
 import type {
   TransactionAccountOption,
   TransactionRow,
@@ -280,6 +281,10 @@ export async function saveTransactionsBatch(
 
     // Stable newest-first order for the editor
     saved.sort((a, b) => b.date.localeCompare(a.date));
+
+    // Transactions alone do not change balances/holdings today, but still
+    // refresh today's snapshot so CSV+sheet ledger edits stay aligned.
+    await recordNetWorthSnapshot(prisma);
 
     revalidatePath("/");
     revalidatePath("/money");
