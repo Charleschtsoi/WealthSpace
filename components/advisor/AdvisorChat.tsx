@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { Sparkles, RefreshCw, AlertTriangle, KeyRound } from "lucide-react";
+import {
+  Sparkles,
+  RefreshCw,
+  AlertTriangle,
+  KeyRound,
+  FlaskConical,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -14,9 +20,11 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getByokPublicStatus, loadByokSettings } from "@/lib/byok";
+import { ADVISOR_DEMO_ACK_KEY } from "@/lib/demo-mode";
 
 type AdvisorChatProps = {
   portfolioJson: string;
+  usingDemoData: boolean;
 };
 
 function messageText(message: {
@@ -39,10 +47,14 @@ function messageText(message: {
   return "";
 }
 
-export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
+export function AdvisorChat({
+  portfolioJson,
+  usingDemoData,
+}: AdvisorChatProps) {
   const [started, setStarted] = useState(false);
   const [byokConfigured, setByokConfigured] = useState(false);
   const [byokHint, setByokHint] = useState<string | null>(null);
+  const [demoAcknowledged, setDemoAcknowledged] = useState(!usingDemoData);
 
   useEffect(() => {
     const status = getByokPublicStatus();
@@ -54,6 +66,20 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
     );
   }, []);
 
+  useEffect(() => {
+    if (!usingDemoData) {
+      setDemoAcknowledged(true);
+      return;
+    }
+    try {
+      setDemoAcknowledged(
+        window.sessionStorage.getItem(ADVISOR_DEMO_ACK_KEY) === "1"
+      );
+    } catch {
+      setDemoAcknowledged(false);
+    }
+  }, [usingDemoData]);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -62,6 +88,7 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
           const byok = loadByokSettings();
           return {
             portfolio: portfolioJson,
+            usingDemoData,
             byok: byok
               ? {
                   provider: byok.provider,
@@ -73,7 +100,7 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
           };
         },
       }),
-    [portfolioJson]
+    [portfolioJson, usingDemoData]
   );
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
@@ -81,17 +108,65 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
   });
 
   const isLoading = status === "submitted" || status === "streaming";
+  const canGenerate = !usingDemoData || demoAcknowledged;
+
+  function acknowledgeDemo(checked: boolean) {
+    setDemoAcknowledged(checked);
+    try {
+      if (checked) {
+        window.sessionStorage.setItem(ADVISOR_DEMO_ACK_KEY, "1");
+      } else {
+        window.sessionStorage.removeItem(ADVISOR_DEMO_ACK_KEY);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }
 
   async function generatePlan() {
+    if (!canGenerate) return;
     setStarted(true);
     setMessages([]);
+    const preface = usingDemoData
+      ? "This is DEMO portfolio data. Produce an ILLUSTRATIVE weekly plan only — do not imply this is the user's real wealth.\n\n"
+      : "";
     await sendMessage({
-      text: `Generate this week's fiduciary rebalancing action plan from my portfolio JSON:\n\n${portfolioJson}`,
+      text: `${preface}Generate this week's fiduciary rebalancing action plan from my portfolio JSON:\n\n${portfolioJson}`,
     });
   }
 
   return (
     <div className="space-y-6">
+      {usingDemoData && (
+        <div className="animate-fade-up flex items-start gap-3 rounded-md border border-amber-600/30 bg-amber-500/5 px-4 py-3 text-sm">
+          <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-amber-800" />
+          <div className="space-y-2">
+            <p className="font-medium text-foreground">
+              Demo portfolio — advice will be labeled illustrative
+            </p>
+            <p className="text-muted-foreground">
+              The advisor is looking at sample holdings, not a personal ledger.{" "}
+              <Link href="/" className="underline underline-offset-2">
+                Start with my data
+              </Link>{" "}
+              from the dashboard when you are ready for real guidance context.
+            </p>
+            <label className="flex items-start gap-2 text-xs text-foreground/90">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-border"
+                checked={demoAcknowledged}
+                onChange={(e) => acknowledgeDemo(e.target.checked)}
+              />
+              <span>
+                I understand this run is illustrative only and is not personal
+                financial advice based on my real accounts.
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+
       <Card className="animate-fade-up border-border/80 bg-card/80 backdrop-blur">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -123,9 +198,19 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
               )}
             </p>
           </div>
-          <Button onClick={generatePlan} disabled={isLoading} className="shrink-0">
+          <Button
+            onClick={generatePlan}
+            disabled={isLoading || !canGenerate}
+            className="shrink-0"
+          >
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            {isLoading ? "Analyzing…" : started ? "Regenerate plan" : "Generate weekly plan"}
+            {isLoading
+              ? "Analyzing…"
+              : started
+                ? "Regenerate plan"
+                : usingDemoData
+                  ? "Generate illustrative plan"
+                  : "Generate weekly plan"}
           </Button>
         </CardHeader>
         <CardContent>
@@ -162,16 +247,21 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
 
       <Card className="animate-fade-up min-h-[280px] border-border/80 bg-card/80 backdrop-blur [animation-delay:100ms]">
         <CardHeader>
-          <CardTitle className="font-display text-lg">Weekly action plan</CardTitle>
+          <CardTitle className="font-display text-lg">
+            {usingDemoData ? "Illustrative weekly action plan" : "Weekly action plan"}
+          </CardTitle>
           <CardDescription>
-            Rebalancing guidelines and concentration-risk highlights
+            {usingDemoData
+              ? "Labeled illustrative because the portfolio payload is demo data"
+              : "Rebalancing guidelines and concentration-risk highlights"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {!started && messages.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              Click &ldquo;Generate weekly plan&rdquo; to analyze the current
-              portfolio and receive a fiduciary rebalancing checklist.
+              {usingDemoData
+                ? "Acknowledge the demo disclaimer, then generate an illustrative plan."
+                : "Click “Generate weekly plan” to analyze the current portfolio and receive a fiduciary rebalancing checklist."}
             </p>
           )}
           <div className="space-y-4">
@@ -189,10 +279,19 @@ export function AdvisorChat({ portfolioJson }: AdvisorChatProps) {
                 >
                   {message.role === "user" ? (
                     <span className="text-xs uppercase tracking-[0.12em]">
-                      Portfolio submitted for analysis
+                      {usingDemoData
+                        ? "Demo portfolio submitted (illustrative)"
+                        : "Portfolio submitted for analysis"}
                     </span>
                   ) : (
-                    text
+                    <>
+                      {usingDemoData && (
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">
+                          Illustrative only — demo data
+                        </p>
+                      )}
+                      {text}
+                    </>
                   )}
                 </div>
               );

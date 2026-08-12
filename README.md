@@ -18,25 +18,55 @@ Personal wealth management and investment advisory dashboard (MVP).
 | Money workspace (`/money`) — Accounts / Holdings / Transactions / Import / History | ✅ |
 | Spreadsheet accounts + holdings + transactions editors | ✅ |
 | BYOK AI settings (`/settings`) | ✅ |
+| Demo → live onboarding banner | ✅ |
 | CSV + manual balance ingestion UI | ✅ |
 | Weekly AI Advisor UI + `/api/chat` | ✅ |
 | Demo/placeholder data without DB | ✅ |
 | Persist to Postgres | Optional — set `DATABASE_URL` |
 | Live OpenAI/Anthropic advice | BYOK in Settings, or server env keys |
 
-## Deploy on Vercel
+## Demo → live path
 
-1. Import [Charleschtsoi/WealthSpace](https://github.com/Charleschtsoi/WealthSpace) into Vercel (Production branch: `main`).
-2. Optional env vars:
-   - `DATABASE_URL` — Postgres connection string (Neon/Supabase/etc.)
-   - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — demo fallback if user has no BYOK key
-3. Deploy. Without env vars the site still loads with demo portfolio data. Users can add their own AI key under **Settings**.
+Without `DATABASE_URL` (or with an empty database), WealthSpace can show a **sample portfolio**. That mode is labeled **Demo** in a persistent banner on the dashboard, advisor, and settings.
 
-After schema changes (e.g. `CRYPTO`, `notes`), run:
+| Action | What happens |
+|--------|----------------|
+| **Start with my data** | Sets a `wealthspace_data_mode=personal` cookie, clears browser-local demo sheets, and opens empty editable Accounts. |
+| **Load sample portfolio** | Switches back to demo UI data for exploration. To put the sample into Postgres, run `npm run db:seed`. |
+| **Live** | Appears automatically once Postgres has real accounts/holdings/snapshots. |
+
+Advisor on demo data requires an explicit acknowledgment and labels output as **illustrative**.
+
+### Local
+
+```bash
+cp .env.example .env
+# Optional: DATABASE_URL, OPENAI_API_KEY / ANTHROPIC_API_KEY
+
+npm install
+npx prisma generate
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) → use the banner to start a personal ledger, or keep exploring demo data.
+
+With Postgres:
 
 ```bash
 npx prisma db push
+npm run db:seed   # optional sample ledger in the DB
 ```
+
+### Vercel
+
+1. Import [Charleschtsoi/WealthSpace](https://github.com/Charleschtsoi/WealthSpace) (Production branch: `main`).
+2. Optional env vars:
+   - `DATABASE_URL` — Postgres (Neon/Supabase/etc.)
+   - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — demo fallback if the user has no BYOK key
+3. Deploy. Without env vars the site still loads with **Demo** data clearly labeled.
+4. After schema changes, run `npx prisma db push` against the production database (from CI, a one-off job, or locally with the prod URL).
+
+Users can add their own AI key under **Settings**. Spreadsheet saves without `DATABASE_URL` stay in the browser until Postgres is configured.
 
 ## Getting started (local)
 
@@ -62,7 +92,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/transactions` | Redirects to `/money?tab=transactions` |
 | `/upload` | Redirects to `/money?tab=import` |
 | `/advisor` | Weekly AI rebalancing plan |
-| `/settings` | BYOK AI provider settings |
+| `/settings` | BYOK AI + demo/personal data mode |
 | `/api/chat` | Streaming advisor endpoint |
 | `/api/ai/test` | BYOK connection test |
 

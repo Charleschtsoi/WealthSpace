@@ -1,4 +1,10 @@
+import { cookies } from "next/headers";
 import { getPrisma } from "@/lib/prisma";
+import {
+  DATA_MODE_COOKIE,
+  parseDataMode,
+  type DataMode,
+} from "@/lib/demo-mode";
 import {
   PLACEHOLDER_ACCOUNTS,
   PLACEHOLDER_HOLDINGS,
@@ -18,13 +24,32 @@ function toNumber(value: unknown): number {
   return Number(value);
 }
 
+function readDataModePreference(): DataMode {
+  try {
+    return parseDataMode(cookies().get(DATA_MODE_COOKIE)?.value);
+  } catch {
+    // Outside of a request context (e.g. build), default to demo.
+    return "demo";
+  }
+}
+
+function emptyFallback<T>(preference: DataMode, demo: T[]): T[] {
+  return preference === "personal" ? [] : demo;
+}
+
 export async function getAccounts(): Promise<{
   data: PlaceholderAccount[];
   fromDb: boolean;
+  preference: DataMode;
 }> {
+  const preference = readDataModePreference();
   const prisma = getPrisma();
   if (!prisma) {
-    return { data: PLACEHOLDER_ACCOUNTS, fromDb: false };
+    return {
+      data: emptyFallback(preference, PLACEHOLDER_ACCOUNTS),
+      fromDb: false,
+      preference,
+    };
   }
 
   try {
@@ -32,10 +57,15 @@ export async function getAccounts(): Promise<{
       orderBy: { name: "asc" },
     });
     if (accounts.length === 0) {
-      return { data: PLACEHOLDER_ACCOUNTS, fromDb: false };
+      return {
+        data: emptyFallback(preference, PLACEHOLDER_ACCOUNTS),
+        fromDb: false,
+        preference,
+      };
     }
     return {
       fromDb: true,
+      preference,
       data: accounts.map((a) => ({
         id: a.id,
         name: a.name,
@@ -46,17 +76,27 @@ export async function getAccounts(): Promise<{
       })),
     };
   } catch {
-    return { data: PLACEHOLDER_ACCOUNTS, fromDb: false };
+    return {
+      data: emptyFallback(preference, PLACEHOLDER_ACCOUNTS),
+      fromDb: false,
+      preference,
+    };
   }
 }
 
 export async function getHoldings(): Promise<{
   data: PlaceholderHolding[];
   fromDb: boolean;
+  preference: DataMode;
 }> {
+  const preference = readDataModePreference();
   const prisma = getPrisma();
   if (!prisma) {
-    return { data: PLACEHOLDER_HOLDINGS, fromDb: false };
+    return {
+      data: emptyFallback(preference, PLACEHOLDER_HOLDINGS),
+      fromDb: false,
+      preference,
+    };
   }
 
   try {
@@ -65,10 +105,15 @@ export async function getHoldings(): Promise<{
       orderBy: { ticker: "asc" },
     });
     if (holdings.length === 0) {
-      return { data: PLACEHOLDER_HOLDINGS, fromDb: false };
+      return {
+        data: emptyFallback(preference, PLACEHOLDER_HOLDINGS),
+        fromDb: false,
+        preference,
+      };
     }
     return {
       fromDb: true,
+      preference,
       data: holdings.map((h) => ({
         id: h.id,
         accountId: h.accountId,
@@ -81,17 +126,27 @@ export async function getHoldings(): Promise<{
       })),
     };
   } catch {
-    return { data: PLACEHOLDER_HOLDINGS, fromDb: false };
+    return {
+      data: emptyFallback(preference, PLACEHOLDER_HOLDINGS),
+      fromDb: false,
+      preference,
+    };
   }
 }
 
 export async function getNetWorthSnapshots(): Promise<{
   data: PlaceholderSnapshot[];
   fromDb: boolean;
+  preference: DataMode;
 }> {
+  const preference = readDataModePreference();
   const prisma = getPrisma();
   if (!prisma) {
-    return { data: PLACEHOLDER_SNAPSHOTS, fromDb: false };
+    return {
+      data: emptyFallback(preference, PLACEHOLDER_SNAPSHOTS),
+      fromDb: false,
+      preference,
+    };
   }
 
   try {
@@ -99,10 +154,15 @@ export async function getNetWorthSnapshots(): Promise<{
       orderBy: { date: "asc" },
     });
     if (snapshots.length === 0) {
-      return { data: PLACEHOLDER_SNAPSHOTS, fromDb: false };
+      return {
+        data: emptyFallback(preference, PLACEHOLDER_SNAPSHOTS),
+        fromDb: false,
+        preference,
+      };
     }
     return {
       fromDb: true,
+      preference,
       data: snapshots.map((s) => ({
         id: s.id,
         date: s.date.toISOString().slice(0, 10),
@@ -112,7 +172,11 @@ export async function getNetWorthSnapshots(): Promise<{
       })),
     };
   } catch {
-    return { data: PLACEHOLDER_SNAPSHOTS, fromDb: false };
+    return {
+      data: emptyFallback(preference, PLACEHOLDER_SNAPSHOTS),
+      fromDb: false,
+      preference,
+    };
   }
 }
 
@@ -127,16 +191,23 @@ export async function getDashboardData() {
   const holdings = holdingsResult.data;
   const snapshots = snapshotsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
+  const fromDb =
+    accountsResult.fromDb && holdingsResult.fromDb && snapshotsResult.fromDb;
+  const preference = accountsResult.preference;
+  const usingPlaceholderData = !fromDb && preference !== "personal";
+  const usingDemoData = usingPlaceholderData;
+  const databaseConfigured = Boolean(getPrisma());
 
   return {
     accounts,
     holdings,
     snapshots,
     metrics,
-    usingPlaceholderData:
-      !accountsResult.fromDb ||
-      !holdingsResult.fromDb ||
-      !snapshotsResult.fromDb,
+    preference,
+    databaseConfigured,
+    usingPlaceholderData,
+    usingDemoData,
+    isLive: fromDb,
   };
 }
 
@@ -148,6 +219,9 @@ export async function getPortfolioForAdvisor() {
   const accounts = accountsResult.data;
   const holdings = holdingsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
+  const fromDb = accountsResult.fromDb && holdingsResult.fromDb;
+  const preference = accountsResult.preference;
+  const usingPlaceholderData = !fromDb && preference !== "personal";
 
   return {
     profile: {
@@ -172,6 +246,10 @@ export async function getPortfolioForAdvisor() {
         h.quantity * h.currentPrice - h.quantity * h.averagePrice,
     })),
     summary: metrics,
-    usingPlaceholderData: !accountsResult.fromDb || !holdingsResult.fromDb,
+    preference,
+    usingPlaceholderData,
+    usingDemoData: usingPlaceholderData,
+    isLive: fromDb,
+    databaseConfigured: Boolean(getPrisma()),
   };
 }

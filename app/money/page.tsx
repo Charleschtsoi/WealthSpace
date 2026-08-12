@@ -1,9 +1,14 @@
 import { Suspense } from "react";
 import { MoneyWorkspace } from "@/components/money/MoneyWorkspace";
+import { DataModeBanner } from "@/components/DataModeBanner";
+import { getDashboardData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
-export default function MoneyPage() {
+export default async function MoneyPage() {
+  const { preference, usingDemoData, isLive, databaseConfigured } =
+    await getDashboardData();
+
   return (
     <div className="space-y-8">
       <header className="animate-fade-up space-y-2">
@@ -19,6 +24,12 @@ export default function MoneyPage() {
           Dashboard metrics refresh from the same source after you Save.
         </p>
       </header>
+      <DataModeBanner
+        preference={preference}
+        usingDemoData={usingDemoData}
+        isLive={isLive}
+        databaseConfigured={databaseConfigured}
+      />
       <Suspense
         fallback={
           <p className="text-sm text-muted-foreground">Loading workspace…</p>

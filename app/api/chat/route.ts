@@ -12,6 +12,9 @@ export const maxDuration = 60;
 const SYSTEM_PROMPT =
   "You are a fiduciary wealth advisor. The user is a 38-year-old IT Project Manager planning for retirement at 55. Their target allocation is 80% Broad Index (VOO/VXUS) and 20% Individual Tech (NVDA, META). Analyze their current portfolio and provide a weekly rebalancing guideline, highlighting concentration risks.";
 
+const DEMO_SYSTEM_ADDENDUM =
+  "IMPORTANT: The portfolio JSON is DEMO / SAMPLE data, not the user's real wealth. Begin your reply with a clear one-line disclaimer that the plan is ILLUSTRATIVE ONLY. Do not imply personalized advice about their actual finances.";
+
 type ByokPayload = {
   provider?: "openai" | "anthropic";
   model?: string;
@@ -63,6 +66,7 @@ export async function POST(req: Request) {
         ? body.portfolio
         : JSON.stringify(body.portfolio ?? {});
     const byok = body.byok as ByokPayload | undefined;
+    const usingDemoData = Boolean(body.usingDemoData);
 
     const resolved = resolveModel(byok);
     if ("error" in resolved) {
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
     const result = streamText({
       model: resolved.model,
       system: `${SYSTEM_PROMPT}
-
+${usingDemoData ? `\n${DEMO_SYSTEM_ADDENDUM}\n` : ""}
 Current portfolio JSON for analysis:
 ${portfolio}
 
@@ -83,7 +87,11 @@ Respond with a concise weekly action plan covering:
 1) Current vs target allocation drift
 2) Concentration risks (single-name / sector)
 3) Specific rebalancing trades or cash deployment for this week
-4) Risks and caveats (not personalized legal/tax advice)`,
+4) Risks and caveats (not personalized legal/tax advice)${
+        usingDemoData
+          ? "\n5) Explicit reminder that this is illustrative demo output"
+          : ""
+      }`,
       messages: await convertToModelMessages(messages),
     });
 

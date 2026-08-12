@@ -24,6 +24,8 @@ type Props = {
   snapshots: PlaceholderSnapshot[];
   holdings: PlaceholderHolding[];
   usingPlaceholderData: boolean;
+  /** When false, parent already renders DataModeBanner. Default true. */
+  showMvpBanner?: boolean;
 };
 
 export function DashboardClient({
@@ -31,6 +33,7 @@ export function DashboardClient({
   snapshots,
   holdings: serverHoldings,
   usingPlaceholderData,
+  showMvpBanner = true,
 }: Props) {
   const [metrics, setMetrics] = useState(serverMetrics);
   const [holdings, setHoldings] = useState(serverHoldings);
@@ -73,9 +76,11 @@ export function DashboardClient({
 
   return (
     <>
-      <MvpBanner
-        usingPlaceholderData={usingPlaceholderData || usingLocalLedger}
-      />
+      {showMvpBanner && (
+        <MvpBanner
+          usingPlaceholderData={usingPlaceholderData || usingLocalLedger}
+        />
+      )}
 
       {usingLocalLedger && (
         <p className="animate-fade-up rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
