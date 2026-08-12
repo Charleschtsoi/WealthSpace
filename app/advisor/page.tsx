@@ -1,4 +1,5 @@
 import { AdvisorChat } from "@/components/advisor/AdvisorChat";
+import { DataModeBanner } from "@/components/DataModeBanner";
 import { getPortfolioForAdvisor } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,16 @@ export default async function AdvisorPage() {
           80/20 target allocation.
         </p>
       </header>
-      <AdvisorChat portfolioJson={portfolioJson} />
+      <DataModeBanner
+        preference={portfolio.preference}
+        usingDemoData={portfolio.usingDemoData}
+        isLive={portfolio.isLive}
+        databaseConfigured={portfolio.databaseConfigured}
+      />
+      <AdvisorChat
+        portfolioJson={portfolioJson}
+        usingDemoData={portfolio.usingDemoData}
+      />
     </div>
   );
 }

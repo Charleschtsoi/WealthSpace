@@ -1,6 +1,12 @@
 import { ByokSettingsForm } from "@/components/settings/ByokSettingsForm";
+import { DataModeSettings } from "@/components/settings/DataModeSettings";
+import { getDataModeMeta } from "@/lib/actions/demo-mode";
 
-export default function SettingsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SettingsPage() {
+  const mode = await getDataModeMeta();
+
   return (
     <div className="space-y-8">
       <header className="animate-fade-up space-y-2">
@@ -11,11 +17,14 @@ export default function SettingsPage() {
           AI &amp; preferences
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-          Configure Bring Your Own Key (BYOK) so the Weekly Advisor runs on your
-          provider account. Keys stay in this browser unless you later add
-          server-side auth.
+          Configure Bring Your Own Key (BYOK) and choose demo vs personal ledger
+          mode. Keys stay in this browser unless you later add server-side auth.
         </p>
       </header>
+      <DataModeSettings
+        preference={mode.preference}
+        databaseConfigured={mode.databaseConfigured}
+      />
       <ByokSettingsForm />
     </div>
   );

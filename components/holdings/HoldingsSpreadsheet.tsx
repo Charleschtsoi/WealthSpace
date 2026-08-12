@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Plus,
@@ -11,6 +11,8 @@ import {
   Undo2,
   Upload,
   RefreshCw,
+  Download,
+  RotateCcw,
 } from "lucide-react";
 import {
   Card,
@@ -43,11 +45,39 @@ import {
   getHoldingsForEditor,
   saveHoldingsBatch,
 } from "@/lib/actions/holdings";
+import { getDataModeMeta } from "@/lib/actions/demo-mode";
 import { PLACEHOLDER_HOLDINGS } from "@/lib/placeholder-data";
+import { recordMoneyActivity } from "@/lib/money-activity";
+import { notifyLedgerSaved } from "@/lib/dashboard-local";
 import { cn, formatCurrency } from "@/lib/utils";
+
+type Props = {
+  embedded?: boolean;
+};
 
 function toEditorRows(rows: HoldingRow[]): HoldingRow[] {
   return rows.map((r) => ({ ...r }));
+}
+
+function cloneRows(rows: HoldingRow[]): HoldingRow[] {
+  return rows.map((r) => ({ ...r }));
+}
+
+function downloadHoldingsTemplate() {
+  const header = "Ticker,Account,Qty,Avg price,Current price,Currency";
+  const sample = PLACEHOLDER_HOLDINGS.map(
+    (h) =>
+      `${h.ticker},${h.accountName ?? "Firstrade"},${h.quantity},${h.averagePrice},${h.currentPrice},${h.currency}`
+  ).join("\n");
+  const blob = new Blob([`${header}\n${sample}\n`], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "wealthspace-holdings-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function mergeAccountOptions(
@@ -72,8 +102,9 @@ function mergeAccountOptions(
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function HoldingsSpreadsheet() {
+export function HoldingsSpreadsheet({ embedded = false }: Props) {
   const [rows, setRows] = useState<HoldingRow[]>([]);
+  const [baseline, setBaseline] = useState<HoldingRow[]>([]);
   const [accounts, setAccounts] = useState<HoldingAccountOption[]>([]);
   const [history, setHistory] = useState<HoldingRow[][]>([]);
   const [dirty, setDirty] = useState(false);
@@ -81,13 +112,16 @@ export function HoldingsSpreadsheet() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const [loaded, setLoaded] = useState(false);
+  const dirtyRef = useRef(false);
+  const saveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [remoteHoldings, remoteAccounts] = await Promise.all([
+      const [remoteHoldings, remoteAccounts, modeMeta] = await Promise.all([
         getHoldingsForEditor(),
         getAccountOptionsForHoldings(),
+        getDataModeMeta(),
       ]);
       if (cancelled) return;
 
@@ -100,31 +134,42 @@ export function HoldingsSpreadsheet() {
       setAccounts(accountOptions);
 
       const defaultAccount = accountOptions[0] ?? null;
+      let next: HoldingRow[];
 
       if (remoteHoldings.fromDb && remoteHoldings.rows.length) {
-        setRows(toEditorRows(remoteHoldings.rows));
+        next = toEditorRows(remoteHoldings.rows);
+        setStatus(null);
       } else {
         const local = loadLocalHoldings();
         if (local?.length) {
-          setRows(toEditorRows(local));
+          next = toEditorRows(local);
           setStatus("Loaded holdings saved in this browser.");
-        } else {
-          setRows(
-            PLACEHOLDER_HOLDINGS.map((h) => ({
-              id: h.id,
-              ticker: h.ticker,
-              accountId: h.accountId,
-              accountName: h.accountName ?? defaultAccount?.name ?? "",
-              quantity: h.quantity,
-              averagePrice: h.averagePrice,
-              currentPrice: h.currentPrice,
-              currency: h.currency,
-              persisted: false,
-            }))
+        } else if (modeMeta.preference === "personal") {
+          next = [createEmptyHoldingRow(defaultAccount)];
+          setStatus(
+            accountOptions.length
+              ? "Personal ledger — add positions and Save."
+              : "Create an account on Accounts first, then add holdings here."
           );
+        } else {
+          next = PLACEHOLDER_HOLDINGS.map((h) => ({
+            id: h.id,
+            ticker: h.ticker,
+            accountId: h.accountId,
+            accountName: h.accountName ?? defaultAccount?.name ?? "",
+            quantity: h.quantity,
+            averagePrice: h.averagePrice,
+            currentPrice: h.currentPrice,
+            currency: h.currency,
+            persisted: false,
+          }));
           setStatus("Starter demo positions loaded — edit and Save.");
         }
       }
+      setRows(next);
+      setBaseline(cloneRows(next));
+      setDirty(false);
+      dirtyRef.current = false;
       setLoaded(true);
     })();
     return () => {
@@ -136,20 +181,25 @@ export function HoldingsSpreadsheet() {
     setHistory((h) => [...h.slice(-19), current.map((r) => ({ ...r }))]);
   }, []);
 
+  const markDirty = useCallback(() => {
+    setDirty(true);
+    dirtyRef.current = true;
+  }, []);
+
   const updateRow = useCallback(
     (id: string, patch: Partial<HoldingRow>) => {
       setRows((prev) => {
         pushHistory(prev);
         return prev.map((r) => (r.id === id ? { ...r, ...patch } : r));
       });
-      setDirty(true);
+      markDirty();
       setErrors((e) => {
         const next = { ...e };
         delete next[id];
         return next;
       });
     },
-    [pushHistory]
+    [markDirty, pushHistory]
   );
 
   const setAccountForRow = (id: string, accountId: string) => {
@@ -165,7 +215,7 @@ export function HoldingsSpreadsheet() {
       pushHistory(prev);
       return [...prev, createEmptyHoldingRow(accounts[0] ?? null)];
     });
-    setDirty(true);
+    markDirty();
   };
 
   const duplicateRow = (id: string) => {
@@ -183,7 +233,7 @@ export function HoldingsSpreadsheet() {
       next.splice(idx + 1, 0, copy);
       return next;
     });
-    setDirty(true);
+    markDirty();
   };
 
   const deleteRow = (id: string) => {
@@ -191,7 +241,7 @@ export function HoldingsSpreadsheet() {
       pushHistory(prev);
       return prev.filter((r) => r.id !== id);
     });
-    setDirty(true);
+    markDirty();
   };
 
   const undo = () => {
@@ -199,9 +249,18 @@ export function HoldingsSpreadsheet() {
       if (!h.length) return h;
       const prev = h[h.length - 1];
       setRows(prev);
-      setDirty(true);
+      markDirty();
       return h.slice(0, -1);
     });
+  };
+
+  const discard = () => {
+    setRows(cloneRows(baseline));
+    setHistory([]);
+    setErrors({});
+    setDirty(false);
+    dirtyRef.current = false;
+    setStatus("Discarded unsaved changes.");
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -225,7 +284,7 @@ export function HoldingsSpreadsheet() {
       }));
       return [...prev, ...mapped];
     });
-    setDirty(true);
+    markDirty();
     setStatus(`Pasted ${parsed.length} row(s) from spreadsheet.`);
   };
 
@@ -248,7 +307,7 @@ export function HoldingsSpreadsheet() {
     return Object.keys(next).length === 0;
   };
 
-  const onSave = () => {
+  const onSave = useCallback(() => {
     if (!validate()) {
       setStatus("Fix highlighted rows before saving.");
       return;
@@ -262,11 +321,33 @@ export function HoldingsSpreadsheet() {
       const savedRows = result.rows ?? rows;
       saveLocalHoldings(savedRows);
       setRows(toEditorRows(savedRows));
+      setBaseline(cloneRows(savedRows));
       setDirty(false);
+      dirtyRef.current = false;
       setHistory([]);
       setStatus(result.message);
+      recordMoneyActivity(
+        "holdings_save",
+        `Saved ${savedRows.length} holding(s)`,
+        result.mode === "local" ? "Browser storage" : "Database"
+      );
+      notifyLedgerSaved();
     });
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
+  saveRef.current = onSave;
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (dirtyRef.current) saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const loadTemplate = () => {
     setRows((prev) => {
@@ -283,7 +364,7 @@ export function HoldingsSpreadsheet() {
         persisted: false,
       }));
     });
-    setDirty(true);
+    markDirty();
     setStatus("Loaded sample holdings template.");
   };
 
@@ -302,6 +383,74 @@ export function HoldingsSpreadsheet() {
     );
   }
 
+  const toolbar = (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={undo}
+        disabled={!history.length}
+      >
+        <Undo2 className="h-4 w-4" />
+        Undo
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={discard}
+        disabled={!dirty || isPending}
+      >
+        <RotateCcw className="h-4 w-4" />
+        Discard
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={downloadHoldingsTemplate}
+      >
+        <Download className="h-4 w-4" />
+        Download template
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled
+        title="Coming in WS-12 — live/delayed quote refresh"
+      >
+        <RefreshCw className="h-4 w-4" />
+        Refresh prices
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={loadTemplate}>
+        Sample rows
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={addRow}>
+        <Plus className="h-4 w-4" />
+        Add row
+      </Button>
+      {!embedded && (
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link href="/money?tab=import">
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </Link>
+        </Button>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        onClick={onSave}
+        disabled={isPending || !dirty}
+      >
+        <Save className="h-4 w-4" />
+        {isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
+      </Button>
+    </div>
+  );
+
   return (
     <Card className="animate-fade-up border-border/80 bg-card/80 backdrop-blur">
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -310,72 +459,59 @@ export function HoldingsSpreadsheet() {
             <FileSpreadsheet className="h-5 w-5 text-primary" />
             Holdings spreadsheet
           </CardTitle>
-          <CardDescription className="mt-2 max-w-2xl">
-            Edit tickers, quantities, and prices like a sheet. Market value
-            updates as you type. Link each row to an{" "}
-            <Link href="/accounts" className="underline underline-offset-2">
-              account
-            </Link>
-            . Paste from Google Sheets or Excel; CSV bulk import stays on{" "}
-            <Link href="/upload" className="underline underline-offset-2">
-              Data Ingestion
-            </Link>
-            .
-          </CardDescription>
+          {!embedded && (
+            <CardDescription className="mt-2 max-w-2xl">
+              Edit tickers, quantities, and prices like a sheet. Prefer the{" "}
+              <Link href="/money" className="underline underline-offset-2">
+                Money workspace
+              </Link>
+              .
+            </CardDescription>
+          )}
+          {embedded && (
+            <CardDescription className="mt-2 max-w-2xl">
+              Market value updates as you type. Tab / Enter between cells.{" "}
+              <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">
+                ⌘/Ctrl+S
+              </kbd>{" "}
+              saves.
+            </CardDescription>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={undo}
-            disabled={!history.length}
-          >
-            <Undo2 className="h-4 w-4" />
-            Undo
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled
-            title="Coming in WS-12 — live/delayed quote refresh"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh prices
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={loadTemplate}>
-            Sample template
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={addRow}>
-            <Plus className="h-4 w-4" />
-            Add row
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={onSave}
-            disabled={isPending || !dirty}
-          >
-            <Save className="h-4 w-4" />
-            {isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
-          </Button>
-        </div>
+        {toolbar}
       </CardHeader>
       <CardContent className="space-y-3" onPaste={onPaste}>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>
-            {dirty ? "Unsaved changes" : "All changes saved"} · {rows.length}{" "}
-            row(s) · Σ{" "}
-            {formatCurrency(totals, "USD", { maximumFractionDigits: 0 })}
-          </span>
-          <Link
-            href="/upload"
-            className="inline-flex items-center gap-1 underline underline-offset-2"
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-2 py-1 font-medium",
+              dirty
+                ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                : "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+            )}
+            role="status"
           >
-            <Upload className="h-3.5 w-3.5" />
-            Import CSV instead
-          </Link>
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                dirty ? "bg-amber-500" : "bg-emerald-500"
+              )}
+            />
+            {dirty ? "Unsaved changes" : "All changes saved"}
+            <span className="font-normal text-muted-foreground">
+              · {rows.length} row(s) · Σ{" "}
+              {formatCurrency(totals, "USD", { maximumFractionDigits: 0 })}
+            </span>
+          </span>
+          {embedded && (
+            <Link
+              href="/money?tab=import"
+              className="inline-flex items-center gap-1 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import CSV
+            </Link>
+          )}
         </div>
 
         <div className="overflow-x-auto rounded-md border border-border">
@@ -524,7 +660,7 @@ export function HoldingsSpreadsheet() {
                     colSpan={8}
                     className="px-4 py-10 text-center text-sm text-muted-foreground"
                   >
-                    No holdings yet. Add a row or load the sample template.
+                    No holdings yet. Add a row or load sample rows.
                   </td>
                 </tr>
               )}

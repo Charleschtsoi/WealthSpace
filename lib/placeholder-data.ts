@@ -26,6 +26,17 @@ export type PlaceholderSnapshot = {
   netWorth: number;
 };
 
+export type PlaceholderTransaction = {
+  id: string;
+  accountId: string;
+  accountName: string;
+  type: "DEPOSIT" | "WITHDRAWAL" | "BUY" | "SELL";
+  amount: number;
+  date: string;
+  currency: string;
+  description: string;
+};
+
 export const PLACEHOLDER_ACCOUNTS: PlaceholderAccount[] = [
   {
     id: "acc_cash_hs",
@@ -103,6 +114,49 @@ export const PLACEHOLDER_HOLDINGS: PlaceholderHolding[] = [
     currentPrice: 228.4,
     currency: "USD",
     accountName: "Firstrade",
+  },
+];
+
+export const PLACEHOLDER_TRANSACTIONS: PlaceholderTransaction[] = [
+  {
+    id: "txn1",
+    accountId: "acc_cash_hs",
+    accountName: "Hang Seng",
+    type: "DEPOSIT",
+    amount: 12000,
+    date: "2026-08-02",
+    currency: "USD",
+    description: "Salary deposit",
+  },
+  {
+    id: "txn2",
+    accountId: "acc_broker_ft",
+    accountName: "Firstrade",
+    type: "BUY",
+    amount: 2500,
+    date: "2026-08-01",
+    currency: "USD",
+    description: "BUY VOO",
+  },
+  {
+    id: "txn3",
+    accountId: "acc_broker_ft",
+    accountName: "Firstrade",
+    type: "SELL",
+    amount: 1800,
+    date: "2026-07-22",
+    currency: "USD",
+    description: "SELL META trim",
+  },
+  {
+    id: "txn4",
+    accountId: "acc_cash_hs",
+    accountName: "Hang Seng",
+    type: "WITHDRAWAL",
+    amount: 950,
+    date: "2026-07-18",
+    currency: "USD",
+    description: "Rent transfer",
   },
 ];
 

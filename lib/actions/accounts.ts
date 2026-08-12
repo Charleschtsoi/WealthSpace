@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { AccountType } from "@prisma/client";
 import { getPrisma } from "@/lib/prisma";
+import { isPhantomPlaceholderId } from "@/lib/demo-mode";
 import type { AccountRow, AccountTypeOption } from "@/lib/accounts-sheet";
 
 export type SaveAccountsResult = {
@@ -110,14 +111,21 @@ export async function saveAccountsBatch(
   try {
     const existing = await prisma.account.findMany();
     const incomingIds = new Set(
-      cleaned.filter((r) => r.persisted && !r.id.startsWith("local_")).map((r) => r.id)
+      cleaned
+        .filter(
+          (r) =>
+            r.persisted &&
+            !isPhantomPlaceholderId(r.id)
+        )
+        .map((r) => r.id)
     );
 
     // Delete removed persisted accounts
     for (const account of existing) {
       if (!incomingIds.has(account.id)) {
         const stillNamed = cleaned.find(
-          (r) => r.name === account.name && r.id.startsWith("local_")
+          (r) =>
+            r.name === account.name && isPhantomPlaceholderId(r.id)
         );
         if (!stillNamed) {
           await prisma.account.delete({ where: { id: account.id } });
@@ -137,7 +145,8 @@ export async function saveAccountsBatch(
         lastUpdated: new Date(),
       };
 
-      if (row.persisted && !row.id.startsWith("local_")) {
+      // Never UPDATE by phantom demo ids — always create/merge by name.
+      if (row.persisted && !isPhantomPlaceholderId(row.id)) {
         const updated = await prisma.account.update({
           where: { id: row.id },
           data,
@@ -188,6 +197,7 @@ export async function saveAccountsBatch(
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
     revalidatePath("/accounts");
     revalidatePath("/advisor");
     revalidatePath("/upload");

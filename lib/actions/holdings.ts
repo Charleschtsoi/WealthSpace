@@ -1,7 +1,13 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getPrisma } from "@/lib/prisma";
+import {
+  DATA_MODE_COOKIE,
+  isPhantomPlaceholderId,
+  parseDataMode,
+} from "@/lib/demo-mode";
 import type { HoldingAccountOption, HoldingRow } from "@/lib/holdings-sheet";
 import { PLACEHOLDER_ACCOUNTS } from "@/lib/placeholder-data";
 
@@ -15,7 +21,9 @@ export type SaveHoldingsResult = {
 export async function getAccountOptionsForHoldings(): Promise<{
   accounts: HoldingAccountOption[];
   fromDb: boolean;
+  preference: "demo" | "personal";
 }> {
+  const preference = parseDataMode(cookies().get(DATA_MODE_COOKIE)?.value);
   const prisma = getPrisma();
   if (prisma) {
     try {
@@ -24,15 +32,20 @@ export async function getAccountOptionsForHoldings(): Promise<{
         select: { id: true, name: true },
       });
       if (accounts.length > 0) {
-        return { accounts, fromDb: true };
+        return { accounts, fromDb: true, preference };
       }
     } catch {
-      // fall through to placeholders
+      // fall through
     }
+  }
+
+  if (preference === "personal") {
+    return { fromDb: false, accounts: [], preference };
   }
 
   return {
     fromDb: false,
+    preference,
     accounts: PLACEHOLDER_ACCOUNTS.map((a) => ({ id: a.id, name: a.name })),
   };
 }
@@ -156,10 +169,21 @@ export async function saveHoldingsBatch(
       });
     }
 
+    // Never resolve holdings onto phantom demo account ids.
+    for (const row of resolved) {
+      if (isPhantomPlaceholderId(row.resolvedAccountId)) {
+        return {
+          success: false,
+          message: `“${row.ticker}” still points at a demo account id. Create a real account on Accounts first, then reassign.`,
+          mode: "database",
+        };
+      }
+    }
+
     const existing = await prisma.assetHolding.findMany();
     const incomingIds = new Set(
       resolved
-        .filter((r) => r.persisted && !r.id.startsWith("local_"))
+        .filter((r) => r.persisted && !isPhantomPlaceholderId(r.id))
         .map((r) => r.id)
     );
 
@@ -181,7 +205,7 @@ export async function saveHoldingsBatch(
         currency: row.currency,
       };
 
-      if (row.persisted && !row.id.startsWith("local_")) {
+      if (row.persisted && !isPhantomPlaceholderId(row.id)) {
         const updated = await prisma.assetHolding.update({
           where: { id: row.id },
           data,
@@ -218,6 +242,7 @@ export async function saveHoldingsBatch(
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
     revalidatePath("/holdings");
     revalidatePath("/accounts");
     revalidatePath("/advisor");
