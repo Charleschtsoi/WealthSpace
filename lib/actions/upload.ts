@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { AccountType, TransactionType } from "@prisma/client";
 import { getPrisma } from "@/lib/prisma";
+import { recordNetWorthSnapshot } from "@/lib/net-worth-snapshot";
 
 export type ActionResult = {
   success: boolean;
@@ -144,6 +145,10 @@ export async function ingestCsvTransactions(
       imported += 1;
     }
 
+    if (imported > 0) {
+      await recordNetWorthSnapshot(prisma);
+    }
+
     revalidatePath("/");
     revalidatePath("/money");
     revalidatePath("/transactions");
@@ -214,6 +219,8 @@ export async function updateAccountBalance(input: {
         },
       });
     }
+
+    await recordNetWorthSnapshot(prisma);
 
     revalidatePath("/");
     revalidatePath("/money");

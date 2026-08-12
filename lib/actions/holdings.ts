@@ -8,6 +8,7 @@ import {
   isPhantomPlaceholderId,
   parseDataMode,
 } from "@/lib/demo-mode";
+import { recordNetWorthSnapshot } from "@/lib/net-worth-snapshot";
 import type { HoldingAccountOption, HoldingRow } from "@/lib/holdings-sheet";
 import { PLACEHOLDER_ACCOUNTS } from "@/lib/placeholder-data";
 
@@ -240,6 +241,8 @@ export async function saveHoldingsBatch(
         });
       }
     }
+
+    await recordNetWorthSnapshot(prisma);
 
     revalidatePath("/");
     revalidatePath("/money");
