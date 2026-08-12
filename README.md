@@ -22,18 +22,19 @@ Personal wealth management and investment advisory dashboard (MVP).
 | CSV + manual balance ingestion UI | ✅ |
 | Weekly AI Advisor UI + `/api/chat` | ✅ |
 | Demo/placeholder data without DB | ✅ |
+| Postgres seed (Hang Seng / Firstrade / Property) | ✅ — `npm run db:setup` |
 | Persist to Postgres | Optional — set `DATABASE_URL` |
 | Live OpenAI/Anthropic advice | BYOK in Settings, or server env keys |
 
 ## Demo → live path
 
-Without `DATABASE_URL` (or with an empty database), WealthSpace can show a **sample portfolio**. That mode is labeled **Demo** in a persistent banner on the dashboard, advisor, and settings.
+Without `DATABASE_URL` (or with an empty database), WealthSpace can show a **sample portfolio**. That mode is labeled **Demo** in a persistent banner on the dashboard, Money, advisor, and settings.
 
 | Action | What happens |
 |--------|----------------|
-| **Start with my data** | Sets a `wealthspace_data_mode=personal` cookie, clears browser-local demo sheets, and opens empty editable Accounts. |
+| **Start with my data** | Sets a `wealthspace_data_mode=personal` cookie, clears browser-local demo sheets, and opens empty editable Accounts in Money. |
 | **Load sample portfolio** | Switches back to demo UI data for exploration. To put the sample into Postgres, run `npm run db:seed`. |
-| **Live** | Appears automatically once Postgres has real accounts/holdings/snapshots. |
+| **Live** | Appears automatically once Postgres has real accounts/holdings/snapshots (e.g. after `npm run db:setup`). |
 
 Advisor on demo data requires an explicit acknowledgment and labels output as **illustrative**.
 
@@ -53,9 +54,17 @@ Open [http://localhost:3000](http://localhost:3000) → use the banner to start 
 With Postgres:
 
 ```bash
-npx prisma db push
-npm run db:seed   # optional sample ledger in the DB
+# Push schema + seed Hang Seng / Firstrade / Property profile
+npm run db:setup
+
+# Idempotent re-seed (safe to re-run)
+npm run db:seed
+
+# Destructive wipe + re-seed
+npm run db:seed:reset
 ```
+
+`db:setup` runs `prisma db push` then the seed. The seed upserts **Accounts**, **Holdings**, **Transactions**, and **NetWorthSnapshots**. When those tables are populated, the dashboard reads from Postgres and the demo banner shows **Live**.
 
 ### Vercel
 
@@ -64,22 +73,14 @@ npm run db:seed   # optional sample ledger in the DB
    - `DATABASE_URL` — Postgres (Neon/Supabase/etc.)
    - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — demo fallback if the user has no BYOK key
 3. Deploy. Without env vars the site still loads with **Demo** data clearly labeled.
-4. After schema changes, run `npx prisma db push` against the production database (from CI, a one-off job, or locally with the prod URL).
-
-Users can add their own AI key under **Settings**. Spreadsheet saves without `DATABASE_URL` stay in the browser until Postgres is configured.
-
-## Getting started (local)
+4. After first deploy with `DATABASE_URL`, run schema push + seed once (Vercel CLI, Neon SQL, or any machine with the same URL):
 
 ```bash
-cp .env.example .env
-# Optionally set DATABASE_URL and OPENAI_API_KEY
-
-npm install
-npx prisma generate
-npm run dev
+npx prisma db push
+npm run db:seed
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Users can add their own AI key under **Settings**. Spreadsheet saves without `DATABASE_URL` stay in the browser until Postgres is configured.
 
 ## Routes
 

@@ -27,9 +27,9 @@ export default async function DashboardPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
           Institutional-grade view of net worth, liquidity, and allocation.
-          Demo sample data is labeled clearly until you start a personal ledger
-          or connect Postgres. Edit the ledger in Money — after Save, metrics
-          here refresh from the same source of truth.
+          Numbers come from Postgres when seeded; otherwise demo sample data is
+          labeled clearly until you start a personal ledger. Edit the ledger in
+          Money — after Save, metrics here refresh from the same source of truth.
         </p>
       </header>
 

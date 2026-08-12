@@ -187,12 +187,17 @@ export async function getDashboardData() {
     getNetWorthSnapshots(),
   ]);
 
+  // Live mode only when the full seed profile is present (accounts + holdings +
+  // snapshots). Partial DB rows keep placeholder fallbacks so the MVP still demos.
+  const fromDb =
+    accountsResult.fromDb &&
+    holdingsResult.fromDb &&
+    snapshotsResult.fromDb;
+
   const accounts = accountsResult.data;
   const holdings = holdingsResult.data;
   const snapshots = snapshotsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
-  const fromDb =
-    accountsResult.fromDb && holdingsResult.fromDb && snapshotsResult.fromDb;
   const preference = accountsResult.preference;
   const usingPlaceholderData = !fromDb && preference !== "personal";
   const usingDemoData = usingPlaceholderData;
