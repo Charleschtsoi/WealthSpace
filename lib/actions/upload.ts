@@ -145,6 +145,8 @@ export async function ingestCsvTransactions(
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
+    revalidatePath("/transactions");
     revalidatePath("/upload");
     revalidatePath("/advisor");
 

@@ -1,6 +1,7 @@
 export type MoneyActivityKind =
   | "accounts_save"
   | "holdings_save"
+  | "transactions_save"
   | "csv_import"
   | "manual_balance";
 
@@ -60,6 +61,7 @@ export function clearMoneyActivity(): void {
 export const MONEY_ACTIVITY_LABELS: Record<MoneyActivityKind, string> = {
   accounts_save: "Accounts",
   holdings_save: "Holdings",
+  transactions_save: "Transactions",
   csv_import: "Import",
   manual_balance: "Balance",
 };

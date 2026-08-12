@@ -14,9 +14,9 @@ export default function MoneyPage() {
           Money
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-          One place for day-to-day books: edit accounts and holdings like a
-          spreadsheet, import CSV, then check recent saves. Dashboard metrics
-          refresh from the same source after you Save.
+          One place for day-to-day books: edit accounts, holdings, and
+          transactions like a spreadsheet, import CSV, then check recent saves.
+          Dashboard metrics refresh from the same source after you Save.
         </p>
       </header>
       <Suspense
