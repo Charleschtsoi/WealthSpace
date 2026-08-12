@@ -13,8 +13,10 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
 function revalidateLedgerPaths() {
   revalidatePath("/");
+  revalidatePath("/money");
   revalidatePath("/accounts");
   revalidatePath("/holdings");
+  revalidatePath("/transactions");
   revalidatePath("/advisor");
   revalidatePath("/upload");
   revalidatePath("/settings");

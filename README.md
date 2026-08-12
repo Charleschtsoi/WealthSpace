@@ -15,8 +15,8 @@ Personal wealth management and investment advisory dashboard (MVP).
 | Area | Status |
 |------|--------|
 | Dashboard (net worth, charts, holdings) | ✅ |
-| Spreadsheet accounts editor (`/accounts`) | ✅ |
-| Spreadsheet holdings editor (`/holdings`) | ✅ |
+| Money workspace (`/money`) — Accounts / Holdings / Transactions / Import / History | ✅ |
+| Spreadsheet accounts + holdings + transactions editors | ✅ |
 | BYOK AI settings (`/settings`) | ✅ |
 | Demo → live onboarding banner | ✅ |
 | CSV + manual balance ingestion UI | ✅ |
@@ -86,9 +86,11 @@ Open [http://localhost:3000](http://localhost:3000).
 | Path | Description |
 |------|-------------|
 | `/` | Net worth summary, line chart, allocation donut, holdings |
-| `/accounts` | Sheets-like accounts editor |
-| `/holdings` | Sheets-like holdings editor (qty / prices / MV) |
-| `/upload` | CSV ingestion + manual balance updates |
+| `/money` | Money workspace (Accounts, Holdings, Transactions, Import, History) |
+| `/accounts` | Redirects to `/money?tab=accounts` |
+| `/holdings` | Redirects to `/money?tab=holdings` |
+| `/transactions` | Redirects to `/money?tab=transactions` |
+| `/upload` | Redirects to `/money?tab=import` |
 | `/advisor` | Weekly AI rebalancing plan |
 | `/settings` | BYOK AI + demo/personal data mode |
 | `/api/chat` | Streaming advisor endpoint |

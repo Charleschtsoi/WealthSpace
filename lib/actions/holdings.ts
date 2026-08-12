@@ -242,6 +242,7 @@ export async function saveHoldingsBatch(
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
     revalidatePath("/holdings");
     revalidatePath("/accounts");
     revalidatePath("/advisor");

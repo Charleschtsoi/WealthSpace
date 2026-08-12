@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Papa from "papaparse";
-import { Upload, FileSpreadsheet, CircleDollarSign } from "lucide-react";
+import { Upload, FileSpreadsheet, CircleDollarSign, Download } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -40,6 +40,8 @@ import {
   ingestCsvTransactions,
   updateAccountBalance,
 } from "@/lib/actions/upload";
+import { recordMoneyActivity } from "@/lib/money-activity";
+import { notifyLedgerSaved } from "@/lib/dashboard-local";
 
 type PreviewRow = {
   Date: string;
@@ -57,7 +59,23 @@ const SAMPLE_CSV = `Date,Account,Ticker/Description,Amount,Currency
 2026-08-03,Firstrade,SELL AAPL,-1800,USD
 2026-08-04,Hang Seng,Rent withdrawal,-3200,USD`;
 
-export function DataUploader() {
+type Props = {
+  embedded?: boolean;
+};
+
+function downloadCsvTemplate() {
+  const blob = new Blob([SAMPLE_CSV + "\n"], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "wealthspace-transactions-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function DataUploader({ embedded = false }: Props) {
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -99,11 +117,18 @@ export function DataUploader() {
 
   function onImport() {
     startTransition(async () => {
+      const count = preview.length;
       const result = await ingestCsvTransactions(preview);
       setStatus(result.message);
       if (result.success) {
         setPreview([]);
         setFileName(null);
+        recordMoneyActivity(
+          "csv_import",
+          `Imported ${count} CSV row(s)`,
+          fileName ?? "CSV upload"
+        );
+        notifyLedgerSaved();
       }
     });
   }
@@ -119,6 +144,12 @@ export function DataUploader() {
       });
       setStatus(result.message);
       if (result.success) {
+        recordMoneyActivity(
+          "manual_balance",
+          `Updated balance for ${accountName}`,
+          `${balance} ${currency}`
+        );
+        notifyLedgerSaved();
         setAccountName("");
         setBalance("");
       }
@@ -145,7 +176,10 @@ export function DataUploader() {
           </CardTitle>
           <CardDescription>
             Import statements with columns: Date, Account, Ticker/Description,
-            Amount, Currency. Rows map to Account and Transaction records.
+            Amount, Currency.
+            {embedded
+              ? " Part of the Money workspace — save sheet edits on Accounts / Holdings tabs."
+              : " Rows map to Account and Transaction records."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -175,6 +209,10 @@ export function DataUploader() {
           </label>
 
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={downloadCsvTemplate}>
+              <Download className="h-4 w-4" />
+              Download template
+            </Button>
             <Button type="button" variant="outline" onClick={loadSample}>
               Load sample CSV
             </Button>

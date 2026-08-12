@@ -145,6 +145,8 @@ export async function ingestCsvTransactions(
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
+    revalidatePath("/transactions");
     revalidatePath("/upload");
     revalidatePath("/advisor");
 
@@ -214,6 +216,7 @@ export async function updateAccountBalance(input: {
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
     revalidatePath("/upload");
     revalidatePath("/advisor");
 

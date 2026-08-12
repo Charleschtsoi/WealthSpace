@@ -30,42 +30,66 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  ACCOUNT_TYPE_OPTIONS,
-  createEmptyAccountRow,
-  loadLocalAccounts,
-  parseAccountsPaste,
-  saveLocalAccounts,
-  type AccountRow,
-  type AccountTypeOption,
-} from "@/lib/accounts-sheet";
+  TRANSACTION_TYPE_OPTIONS,
+  createEmptyTransactionRow,
+  loadLocalTransactions,
+  parseTransactionsPaste,
+  saveLocalTransactions,
+  type TransactionAccountOption,
+  type TransactionRow,
+  type TransactionTypeOption,
+} from "@/lib/transactions-sheet";
+import { loadLocalAccounts } from "@/lib/accounts-sheet";
 import {
-  getAccountsForEditor,
-  saveAccountsBatch,
-} from "@/lib/actions/accounts";
-import { getDataModeMeta } from "@/lib/actions/demo-mode";
-import { PLACEHOLDER_ACCOUNTS } from "@/lib/placeholder-data";
+  getAccountOptionsForTransactions,
+  getTransactionsForEditor,
+  saveTransactionsBatch,
+} from "@/lib/actions/transactions";
+import { PLACEHOLDER_TRANSACTIONS } from "@/lib/placeholder-data";
 import { recordMoneyActivity } from "@/lib/money-activity";
 import { notifyLedgerSaved } from "@/lib/dashboard-local";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 type Props = {
-  initialRows?: AccountRow[];
   /** Compact chrome when rendered inside Money workspace */
   embedded?: boolean;
 };
 
-function toEditorRows(rows: AccountRow[]): AccountRow[] {
+function toEditorRows(rows: TransactionRow[]): TransactionRow[] {
   return rows.map((r) => ({ ...r }));
 }
 
-function cloneRows(rows: AccountRow[]): AccountRow[] {
+function cloneRows(rows: TransactionRow[]): TransactionRow[] {
   return rows.map((r) => ({ ...r }));
 }
 
-function downloadAccountsTemplate() {
-  const header = "Account,Type,Balance,Currency,Notes";
-  const sample = PLACEHOLDER_ACCOUNTS.map(
-    (a) => `${a.name},${a.type},${a.balance},${a.currency},`
+function mergeAccountOptions(
+  remote: TransactionAccountOption[],
+  localNames: Array<{ name: string; currency?: string }>
+): TransactionAccountOption[] {
+  const map = new Map<string, TransactionAccountOption>();
+  for (const a of remote) {
+    map.set(a.id, a);
+  }
+  for (const item of localNames) {
+    const trimmed = item.name.trim();
+    if (!trimmed) continue;
+    const existing = Array.from(map.values()).find(
+      (a) => a.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (!existing) {
+      const id = `local_acc_${trimmed.toLowerCase().replace(/\s+/g, "_")}`;
+      map.set(id, { id, name: trimmed, currency: item.currency ?? "USD" });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function downloadTransactionsTemplate() {
+  const header = "Date,Account,Type,Amount,Currency,Description";
+  const sample = PLACEHOLDER_TRANSACTIONS.map(
+    (t) =>
+      `${t.date},${t.accountName},${t.type},${t.amount},${t.currency},${t.description}`
   ).join("\n");
   const blob = new Blob([`${header}\n${sample}\n`], {
     type: "text/csv;charset=utf-8",
@@ -73,20 +97,16 @@ function downloadAccountsTemplate() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "wealthspace-accounts-template.csv";
+  a.download = "wealthspace-transactions-template.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
 
-export function AccountsSpreadsheet({
-  initialRows = [],
-  embedded = false,
-}: Props) {
-  const [rows, setRows] = useState<AccountRow[]>(() =>
-    initialRows.length ? toEditorRows(initialRows) : []
-  );
-  const [baseline, setBaseline] = useState<AccountRow[]>([]);
-  const [history, setHistory] = useState<AccountRow[][]>([]);
+export function TransactionsSpreadsheet({ embedded = false }: Props) {
+  const [rows, setRows] = useState<TransactionRow[]>([]);
+  const [accounts, setAccounts] = useState<TransactionAccountOption[]>([]);
+  const [history, setHistory] = useState<TransactionRow[][]>([]);
+  const [baseline, setBaseline] = useState<TransactionRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -95,69 +115,73 @@ export function AccountsSpreadsheet({
   const dirtyRef = useRef(false);
   const saveRef = useRef<() => void>(() => {});
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [remote, modeMeta] = await Promise.all([
-        getAccountsForEditor(),
-        getDataModeMeta(),
-      ]);
-      if (cancelled) return;
-
-      let next: AccountRow[];
-      if (remote.fromDb && remote.rows.length) {
-        next = toEditorRows(remote.rows);
-        setStatus(null);
-      } else {
-        const local = loadLocalAccounts();
-        if (local?.length) {
-          next = toEditorRows(local);
-          setStatus("Loaded accounts saved in this browser.");
-        } else if (initialRows.length) {
-          next = toEditorRows(initialRows);
-        } else if (modeMeta.preference === "personal") {
-          next = [createEmptyAccountRow()];
-          setStatus(
-            modeMeta.databaseConfigured
-              ? "Personal ledger — add your first account and Save."
-              : "Personal ledger (local) — add your first account. Set DATABASE_URL to persist in Postgres."
-          );
-        } else {
-          next = PLACEHOLDER_ACCOUNTS.map((a) => ({
-            id: a.id,
-            name: a.name,
-            type: a.type as AccountTypeOption,
-            balance: a.balance,
-            currency: a.currency,
-            notes: "",
-            lastUpdated: a.lastUpdated,
-            persisted: false,
-          }));
-          setStatus("Starter demo rows loaded — edit and Save.");
-        }
-      }
-      setRows(next);
-      setBaseline(cloneRows(next));
-      setDirty(false);
-      dirtyRef.current = false;
-      setLoaded(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [initialRows]);
-
-  const pushHistory = useCallback((current: AccountRow[]) => {
-    setHistory((h) => [...h.slice(-19), current.map((r) => ({ ...r }))]);
-  }, []);
-
   const markDirty = useCallback(() => {
     setDirty(true);
     dirtyRef.current = true;
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [remoteTxns, remoteAccounts] = await Promise.all([
+        getTransactionsForEditor(),
+        getAccountOptionsForTransactions(),
+      ]);
+      if (cancelled) return;
+
+      const localAccounts = loadLocalAccounts();
+      const localAccountNames =
+        localAccounts?.map((a) => ({ name: a.name, currency: a.currency })) ??
+        [];
+      const accountOptions = mergeAccountOptions(
+        remoteAccounts.accounts,
+        localAccountNames
+      );
+      setAccounts(accountOptions);
+
+      const defaultAccount = accountOptions[0] ?? null;
+
+      if (remoteTxns.fromDb && remoteTxns.rows.length) {
+        const next = toEditorRows(remoteTxns.rows);
+        setRows(next);
+        setBaseline(cloneRows(next));
+      } else {
+        const local = loadLocalTransactions();
+        if (local?.length) {
+          const next = toEditorRows(local);
+          setRows(next);
+          setBaseline(cloneRows(next));
+          setStatus("Loaded transactions saved in this browser.");
+        } else {
+          const next = PLACEHOLDER_TRANSACTIONS.map((t) => ({
+            id: t.id,
+            date: t.date,
+            accountId: t.accountId,
+            accountName: t.accountName ?? defaultAccount?.name ?? "",
+            type: t.type,
+            amount: t.amount,
+            currency: t.currency,
+            description: t.description,
+            persisted: false,
+          }));
+          setRows(next);
+          setBaseline(cloneRows(next));
+          setStatus("Starter demo transactions loaded — edit and Save.");
+        }
+      }
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const pushHistory = useCallback((current: TransactionRow[]) => {
+    setHistory((h) => [...h.slice(-19), current.map((r) => ({ ...r }))]);
+  }, []);
+
   const updateRow = useCallback(
-    (id: string, patch: Partial<AccountRow>) => {
+    (id: string, patch: Partial<TransactionRow>) => {
       setRows((prev) => {
         pushHistory(prev);
         return prev.map((r) => (r.id === id ? { ...r, ...patch } : r));
@@ -169,13 +193,22 @@ export function AccountsSpreadsheet({
         return next;
       });
     },
-    [markDirty, pushHistory]
+    [pushHistory, markDirty]
   );
+
+  const setAccountForRow = (id: string, accountId: string) => {
+    const account = accounts.find((a) => a.id === accountId);
+    updateRow(id, {
+      accountId,
+      accountName: account?.name ?? "",
+      currency: account?.currency ?? "USD",
+    });
+  };
 
   const addRow = () => {
     setRows((prev) => {
       pushHistory(prev);
-      return [...prev, createEmptyAccountRow()];
+      return [...prev, createEmptyTransactionRow(accounts[0] ?? null)];
     });
     markDirty();
   };
@@ -185,10 +218,9 @@ export function AccountsSpreadsheet({
       pushHistory(prev);
       const idx = prev.findIndex((r) => r.id === id);
       if (idx < 0) return prev;
-      const copy: AccountRow = {
+      const copy: TransactionRow = {
         ...prev[idx],
         id: `local_${crypto.randomUUID()}`,
-        name: prev[idx].name ? `${prev[idx].name} (copy)` : "",
         persisted: false,
       };
       const next = [...prev];
@@ -229,20 +261,22 @@ export function AccountsSpreadsheet({
     const text = e.clipboardData.getData("text/plain");
     if (!text || (!text.includes("\t") && !text.includes("\n"))) return;
     e.preventDefault();
-    const parsed = parseAccountsPaste(text);
+    const parsed = parseTransactionsPaste(text, accounts);
     if (!parsed.length) return;
     setRows((prev) => {
       pushHistory(prev);
       const mapped = parsed.map((p) => ({
-        ...createEmptyAccountRow(),
+        ...createEmptyTransactionRow(accounts[0] ?? null),
         ...p,
-        name: p.name || "",
-        type: p.type || "CASH",
-        balance: p.balance ?? 0,
-        currency: p.currency || "USD",
-        notes: p.notes || "",
+        date: p.date || new Date().toISOString().slice(0, 10),
+        accountId: p.accountId || accounts[0]?.id || "",
+        accountName: p.accountName || accounts[0]?.name || "",
+        type: p.type || "DEPOSIT",
+        amount: p.amount ?? 0,
+        currency: p.currency || accounts[0]?.currency || "USD",
+        description: p.description || "",
       }));
-      return [...prev, ...mapped];
+      return [...mapped, ...prev];
     });
     markDirty();
     setStatus(`Pasted ${parsed.length} row(s) from spreadsheet.`);
@@ -250,11 +284,26 @@ export function AccountsSpreadsheet({
 
   const validate = () => {
     const next: Record<string, string> = {};
+    const accountIds = new Set(accounts.map((a) => a.id));
+    const accountNames = new Set(
+      accounts.map((a) => a.name.trim().toLowerCase())
+    );
+
     for (const row of rows) {
-      if (!row.name.trim()) {
-        next[row.id] = "Name required";
-      } else if (!Number.isFinite(Number(row.balance))) {
-        next[row.id] = "Balance must be a number";
+      if (!row.date.trim() || Number.isNaN(new Date(row.date).getTime())) {
+        next[row.id] = "Valid date required";
+      } else if (!row.accountId && !row.accountName.trim()) {
+        next[row.id] = "Account required";
+      } else if (
+        row.accountId &&
+        !accountIds.has(row.accountId) &&
+        !accountNames.has(row.accountName.trim().toLowerCase())
+      ) {
+        next[row.id] = "Unknown account";
+      } else if (!Number.isFinite(Number(row.amount)) || Number(row.amount) < 0) {
+        next[row.id] = "Amount must be ≥ 0";
+      } else if (!/^[A-Za-z]{3}$/.test(row.currency.trim())) {
+        next[row.id] = "Currency must be 3 letters";
       }
     }
     setErrors(next);
@@ -267,13 +316,13 @@ export function AccountsSpreadsheet({
       return;
     }
     startTransition(async () => {
-      const result = await saveAccountsBatch(rows);
+      const result = await saveTransactionsBatch(rows);
       if (!result.success) {
         setStatus(result.message);
         return;
       }
       const savedRows = result.rows ?? rows;
-      saveLocalAccounts(savedRows);
+      saveLocalTransactions(savedRows);
       setRows(toEditorRows(savedRows));
       setBaseline(cloneRows(savedRows));
       setDirty(false);
@@ -281,13 +330,12 @@ export function AccountsSpreadsheet({
       setHistory([]);
       setStatus(result.message);
       recordMoneyActivity(
-        "accounts_save",
-        `Saved ${savedRows.length} account(s)`,
+        "transactions_save",
+        `Saved ${savedRows.length} transaction(s)`,
         result.mode === "local" ? "Browser storage" : "Database"
       );
       notifyLedgerSaved();
     });
-    // validate closes over rows/errors — intentional
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
@@ -307,23 +355,24 @@ export function AccountsSpreadsheet({
   const loadTemplate = () => {
     setRows((prev) => {
       pushHistory(prev);
-      return PLACEHOLDER_ACCOUNTS.map((a) => ({
+      return PLACEHOLDER_TRANSACTIONS.map((t) => ({
         id: `local_${crypto.randomUUID()}`,
-        name: a.name,
-        type: a.type as AccountTypeOption,
-        balance: a.balance,
-        currency: a.currency,
-        notes: "",
-        lastUpdated: new Date().toISOString(),
+        date: t.date,
+        accountId: t.accountId,
+        accountName: t.accountName ?? accounts[0]?.name ?? "",
+        type: t.type,
+        amount: t.amount,
+        currency: t.currency,
+        description: t.description,
         persisted: false,
       }));
     });
     markDirty();
-    setStatus("Loaded sample accounts template.");
+    setStatus("Loaded sample transactions template.");
   };
 
   const totals = useMemo(
-    () => rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0),
+    () => rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
     [rows]
   );
 
@@ -331,7 +380,7 @@ export function AccountsSpreadsheet({
     return (
       <Card>
         <CardContent className="py-10 text-sm text-muted-foreground">
-          Loading accounts…
+          Loading transactions…
         </CardContent>
       </Card>
     );
@@ -339,7 +388,13 @@ export function AccountsSpreadsheet({
 
   const toolbar = (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="outline" size="sm" onClick={undo} disabled={!history.length}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={undo}
+        disabled={!history.length}
+      >
         <Undo2 className="h-4 w-4" />
         Undo
       </Button>
@@ -353,7 +408,12 @@ export function AccountsSpreadsheet({
         <RotateCcw className="h-4 w-4" />
         Discard
       </Button>
-      <Button type="button" variant="outline" size="sm" onClick={downloadAccountsTemplate}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={downloadTransactionsTemplate}
+      >
         <Download className="h-4 w-4" />
         Download template
       </Button>
@@ -372,7 +432,12 @@ export function AccountsSpreadsheet({
           </Link>
         </Button>
       )}
-      <Button type="button" size="sm" onClick={onSave} disabled={isPending || !dirty}>
+      <Button
+        type="button"
+        size="sm"
+        onClick={onSave}
+        disabled={isPending || !dirty}
+      >
         <Save className="h-4 w-4" />
         {isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
       </Button>
@@ -385,21 +450,24 @@ export function AccountsSpreadsheet({
         <div>
           <CardTitle className="flex items-center gap-2 font-display text-xl">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
-            Accounts spreadsheet
+            Transactions spreadsheet
           </CardTitle>
           {!embedded && (
             <CardDescription className="mt-2 max-w-2xl">
-              Edit bank, brokerage, crypto, and property balances like a sheet.
-              Prefer the{" "}
-              <Link href="/money" className="underline underline-offset-2">
+              Edit deposits, withdrawals, buys, and sells like a sheet. Prefer
+              the{" "}
+              <Link
+                href="/money?tab=transactions"
+                className="underline underline-offset-2"
+              >
                 Money workspace
-              </Link>{" "}
-              for Accounts, Holdings, and Import together.
+              </Link>
+              .
             </CardDescription>
           )}
           {embedded && (
             <CardDescription className="mt-2 max-w-2xl">
-              Click a cell, Tab / Enter between fields, paste from Sheets.{" "}
+              Daily correction surface for cashflow history. Paste from Sheets.{" "}
               <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">
                 ⌘/Ctrl+S
               </kbd>{" "}
@@ -429,7 +497,7 @@ export function AccountsSpreadsheet({
             {dirty ? "Unsaved changes" : "All changes saved"}
             <span className="font-normal text-muted-foreground">
               · {rows.length} row(s) · Σ{" "}
-              {totals.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              {formatCurrency(totals, "USD", { maximumFractionDigits: 0 })}
             </span>
           </span>
           {embedded && (
@@ -443,18 +511,31 @@ export function AccountsSpreadsheet({
           )}
         </div>
 
+        {!accounts.length && (
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+            No accounts found. Create accounts on the{" "}
+            <Link
+              href="/money?tab=accounts"
+              className="underline underline-offset-2"
+            >
+              Accounts
+            </Link>{" "}
+            tab before saving transactions to the database.
+          </p>
+        )}
+
         <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="w-full min-w-[920px] border-collapse text-sm">
             <thead>
               <tr className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="sticky left-0 z-10 bg-muted/80 px-3 py-2 font-medium backdrop-blur">
-                  Account
+                  Date
                 </th>
+                <th className="px-3 py-2 font-medium">Account</th>
                 <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Balance</th>
+                <th className="px-3 py-2 font-medium text-right">Amount</th>
                 <th className="px-3 py-2 font-medium">CCY</th>
-                <th className="px-3 py-2 font-medium">Notes</th>
-                <th className="px-3 py-2 font-medium">Updated</th>
+                <th className="px-3 py-2 font-medium">Description</th>
                 <th className="px-3 py-2 font-medium"> </th>
               </tr>
             </thead>
@@ -469,27 +550,48 @@ export function AccountsSpreadsheet({
                 >
                   <td className="sticky left-0 z-10 bg-card/95 px-2 py-1.5 backdrop-blur">
                     <Input
-                      value={row.name}
-                      onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                      type="date"
+                      value={row.date}
+                      onChange={(e) =>
+                        updateRow(row.id, { date: e.target.value })
+                      }
                       className="h-9 border-transparent bg-transparent px-2 shadow-none focus-visible:border-input focus-visible:bg-background"
-                      placeholder="Account name"
                       aria-invalid={Boolean(errors[row.id])}
                     />
                   </td>
                   <td className="px-2 py-1.5">
                     <Select
+                      value={row.accountId || undefined}
+                      onValueChange={(v) => setAccountForRow(row.id, v)}
+                    >
+                      <SelectTrigger className="h-9 min-w-[140px] border-transparent bg-transparent shadow-none focus:ring-1">
+                        <SelectValue placeholder="Select account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Select
                       value={row.type}
                       onValueChange={(v) =>
-                        updateRow(row.id, { type: v as AccountTypeOption })
+                        updateRow(row.id, {
+                          type: v as TransactionTypeOption,
+                        })
                       }
                     >
-                      <SelectTrigger className="h-9 border-transparent bg-transparent shadow-none focus:ring-1">
+                      <SelectTrigger className="h-9 min-w-[120px] border-transparent bg-transparent shadow-none focus:ring-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                        {TRANSACTION_TYPE_OPTIONS.map((t) => (
                           <SelectItem key={t} value={t}>
-                            {t.replace("_", " ")}
+                            {t}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -499,9 +601,10 @@ export function AccountsSpreadsheet({
                     <Input
                       type="number"
                       step="0.01"
-                      value={Number.isFinite(row.balance) ? row.balance : 0}
+                      min="0"
+                      value={Number.isFinite(row.amount) ? row.amount : 0}
                       onChange={(e) =>
-                        updateRow(row.id, { balance: Number(e.target.value) })
+                        updateRow(row.id, { amount: Number(e.target.value) })
                       }
                       className="h-9 border-transparent bg-transparent px-2 text-right tabular-nums shadow-none focus-visible:border-input focus-visible:bg-background"
                     />
@@ -520,16 +623,13 @@ export function AccountsSpreadsheet({
                   </td>
                   <td className="px-2 py-1.5">
                     <Input
-                      value={row.notes}
-                      onChange={(e) => updateRow(row.id, { notes: e.target.value })}
+                      value={row.description}
+                      onChange={(e) =>
+                        updateRow(row.id, { description: e.target.value })
+                      }
                       className="h-9 border-transparent bg-transparent px-2 shadow-none focus-visible:border-input focus-visible:bg-background"
-                      placeholder="Optional"
+                      placeholder="Optional note"
                     />
-                  </td>
-                  <td className="px-3 py-1.5 text-xs tabular-nums text-muted-foreground">
-                    {row.lastUpdated
-                      ? new Date(row.lastUpdated).toLocaleDateString()
-                      : "—"}
                   </td>
                   <td className="px-2 py-1.5">
                     <div className="flex gap-1">
@@ -563,7 +663,8 @@ export function AccountsSpreadsheet({
                     colSpan={7}
                     className="px-4 py-10 text-center text-sm text-muted-foreground"
                   >
-                    No accounts yet. Add a row or load sample rows.
+                    No transactions yet. Add a row, paste from Sheets, or load
+                    sample rows. CSV bulk import stays on Import.
                   </td>
                 </tr>
               )}

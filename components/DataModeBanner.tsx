@@ -53,7 +53,7 @@ export function DataModeBanner({
           : "Personal mode on. Sheets start empty. Add DATABASE_URL in Settings/Vercel to persist, or keep editing locally in this browser."
       );
       router.refresh();
-      router.push("/accounts");
+      router.push("/money?tab=accounts");
     });
   }
 
@@ -157,7 +157,7 @@ export function DataModeBanner({
           )}
           {usingDemoData && (
             <Button size="sm" variant="outline" asChild>
-              <Link href="/accounts">Open accounts</Link>
+              <Link href="/money?tab=accounts">Open accounts</Link>
             </Button>
           )}
           {!databaseConfigured && (
