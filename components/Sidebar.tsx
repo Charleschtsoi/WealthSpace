@@ -4,13 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Upload,
   Sparkles,
   Landmark,
   Menu,
   X,
-  Table2,
-  CandlestickChart,
+  Wallet,
   Settings,
 } from "lucide-react";
 import { useState } from "react";
@@ -19,9 +17,7 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/accounts", label: "Accounts", icon: Table2 },
-  { href: "/holdings", label: "Holdings", icon: CandlestickChart },
-  { href: "/upload", label: "Data Ingestion", icon: Upload },
+  { href: "/money", label: "Money", icon: Wallet },
   { href: "/advisor", label: "AI Advisor", icon: Sparkles },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

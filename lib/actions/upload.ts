@@ -214,6 +214,7 @@ export async function updateAccountBalance(input: {
     }
 
     revalidatePath("/");
+    revalidatePath("/money");
     revalidatePath("/upload");
     revalidatePath("/advisor");
 

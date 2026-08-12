@@ -1,8 +1,4 @@
-import { SummaryCards } from "@/components/dashboard/SummaryCards";
-import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
-import { AllocationChart } from "@/components/dashboard/AllocationChart";
-import { HoldingsTable } from "@/components/dashboard/HoldingsTable";
-import { MvpBanner } from "@/components/MvpBanner";
+import { DashboardClient } from "@/components/dashboard/DashboardClient";
 import { getDashboardData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -22,29 +18,17 @@ export default async function DashboardPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
           Institutional-grade view of net worth, liquidity, and allocation.
-          Charts use live database data when available, otherwise placeholder
-          snapshots so the UI renders immediately.
+          Edit the ledger in Money — after Save, metrics here refresh from the
+          same source of truth.
         </p>
       </header>
 
-      <MvpBanner usingPlaceholderData={usingPlaceholderData} />
-
-      <SummaryCards
-        totalNetWorth={metrics.totalNetWorth}
-        liquidCash={metrics.liquidCash}
-        totalInvested={metrics.totalInvested}
+      <DashboardClient
+        metrics={metrics}
+        snapshots={snapshots}
+        holdings={holdings}
+        usingPlaceholderData={usingPlaceholderData}
       />
-
-      <div className="grid gap-6 xl:grid-cols-5">
-        <div className="xl:col-span-3">
-          <NetWorthChart data={snapshots} />
-        </div>
-        <div className="xl:col-span-2">
-          <AllocationChart data={metrics.allocation} />
-        </div>
-      </div>
-
-      <HoldingsTable holdings={holdings} />
     </div>
   );
 }
