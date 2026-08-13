@@ -14,6 +14,7 @@ import {
   type PlaceholderHolding,
   type PlaceholderSnapshot,
 } from "@/lib/placeholder-data";
+import { reconcileLedger } from "@/lib/valuation";
 
 function toNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -198,6 +199,7 @@ export async function getDashboardData() {
   const holdings = holdingsResult.data;
   const snapshots = snapshotsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
+  const reconciliationIssues = reconcileLedger(accounts, holdings);
   const preference = accountsResult.preference;
   const usingPlaceholderData = !fromDb && preference !== "personal";
   const usingDemoData = usingPlaceholderData;
@@ -208,6 +210,7 @@ export async function getDashboardData() {
     holdings,
     snapshots,
     metrics,
+    reconciliationIssues,
     preference,
     databaseConfigured,
     usingPlaceholderData,
@@ -224,6 +227,7 @@ export async function getPortfolioForAdvisor() {
   const accounts = accountsResult.data;
   const holdings = holdingsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
+  const reconciliationIssues = reconcileLedger(accounts, holdings);
   const fromDb = accountsResult.fromDb && holdingsResult.fromDb;
   const preference = accountsResult.preference;
   const usingPlaceholderData = !fromDb && preference !== "personal";
@@ -251,6 +255,7 @@ export async function getPortfolioForAdvisor() {
         h.quantity * h.currentPrice - h.quantity * h.averagePrice,
     })),
     summary: metrics,
+    reconciliationIssues,
     preference,
     usingPlaceholderData,
     usingDemoData: usingPlaceholderData,
