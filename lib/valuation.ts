@@ -121,7 +121,9 @@ export function computeNetWorthFromLedger(
 ): ComputedNetWorth {
   const byAccount = holdingsMvByAccount(holdings);
   let holdingsMv = 0;
-  for (const mv of byAccount.values()) holdingsMv += mv;
+  byAccount.forEach((mv) => {
+    holdingsMv += mv;
+  });
 
   let accountAssets = 0;
   for (const account of accounts) {
