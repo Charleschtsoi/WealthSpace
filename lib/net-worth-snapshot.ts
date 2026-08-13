@@ -1,33 +1,24 @@
-import { AccountType, type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "@prisma/client";
 import { getPrisma } from "@/lib/prisma";
+import {
+  computeNetWorthFromLedger,
+  type ComputedNetWorth,
+  type ValuationAccountInput,
+  type ValuationHoldingInput,
+} from "@/lib/valuation";
+
+export {
+  computeNetWorthFromLedger,
+  type ComputedNetWorth,
+} from "@/lib/valuation";
 
 /**
- * Double-count rules for total assets (WS-27):
- * - CASH + REAL_ESTATE: always include account.balance (cash / property mark).
- * - Holdings: always include quantity × currentPrice (equities / crypto lots).
- * - BROKERAGE + CRYPTO balances: include only when that account has no holdings,
- *   so a brokerage balance that mirrors portfolio MV is not double-counted with
- *   line-item holdings. Cash sleeves without lots still count.
- * - Liabilities: 0 until WS-13.
+ * Double-count rules for total assets (WS-27 / WS-31):
+ * see `lib/valuation.ts` for the canonical documentation.
  */
 
-export type SnapshotAccountInput = {
-  id: string;
-  type: AccountType | string;
-  balance: number;
-};
-
-export type SnapshotHoldingInput = {
-  accountId: string;
-  quantity: number;
-  currentPrice: number;
-};
-
-export type ComputedNetWorth = {
-  totalAssets: number;
-  totalLiabilities: number;
-  netWorth: number;
-};
+export type SnapshotAccountInput = ValuationAccountInput;
+export type SnapshotHoldingInput = ValuationHoldingInput;
 
 export type RecordSnapshotResult =
   | { ok: true; skipped: true; reason: "no_database" }
@@ -52,67 +43,6 @@ export function localCalendarDateKey(now: Date = new Date()): Date {
 
 export function formatSnapshotDate(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-export function computeNetWorthFromLedger(
-  accounts: SnapshotAccountInput[],
-  holdings: SnapshotHoldingInput[]
-): ComputedNetWorth {
-  const holdingsByAccount = new Map<string, number>();
-  let holdingsMv = 0;
-
-  for (const h of holdings) {
-    const mv = Number(h.quantity) * Number(h.currentPrice);
-    if (!Number.isFinite(mv)) continue;
-    holdingsMv += mv;
-    holdingsByAccount.set(
-      h.accountId,
-      (holdingsByAccount.get(h.accountId) ?? 0) + mv
-    );
-  }
-
-  let accountAssets = 0;
-  for (const account of accounts) {
-    const balance = Number(account.balance);
-    if (!Number.isFinite(balance)) continue;
-
-    const type = String(account.type);
-    if (type === AccountType.CASH || type === "CASH") {
-      accountAssets += balance;
-      continue;
-    }
-    if (type === AccountType.REAL_ESTATE || type === "REAL_ESTATE") {
-      accountAssets += balance;
-      continue;
-    }
-    if (
-      type === AccountType.BROKERAGE ||
-      type === "BROKERAGE" ||
-      type === AccountType.CRYPTO ||
-      type === "CRYPTO"
-    ) {
-      const hasHoldings = (holdingsByAccount.get(account.id) ?? 0) > 0;
-      if (!hasHoldings) {
-        accountAssets += balance;
-      }
-      continue;
-    }
-
-    // Unknown types: include balance only if no holdings on the account.
-    if (!(holdingsByAccount.get(account.id) ?? 0)) {
-      accountAssets += balance;
-    }
-  }
-
-  const totalAssets = roundMoney(accountAssets + holdingsMv);
-  const totalLiabilities = 0;
-  const netWorth = roundMoney(totalAssets - totalLiabilities);
-
-  return { totalAssets, totalLiabilities, netWorth };
-}
-
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function toNumber(value: unknown): number {
@@ -147,7 +77,7 @@ export async function recordNetWorthSnapshot(
       }),
     ]);
 
-    const computed = computeNetWorthFromLedger(
+    const computed: ComputedNetWorth = computeNetWorthFromLedger(
       accounts.map((a) => ({
         id: a.id,
         type: a.type,

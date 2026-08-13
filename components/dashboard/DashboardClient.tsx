@@ -6,11 +6,13 @@ import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/dashboard/HoldingsTable";
 import { MvpBanner } from "@/components/MvpBanner";
+import { ReconciliationBanner } from "@/components/ReconciliationBanner";
 import { readLocalDashboardOverride } from "@/lib/dashboard-local";
 import type {
   PlaceholderHolding,
   PlaceholderSnapshot,
 } from "@/lib/placeholder-data";
+import type { ReconciliationIssue } from "@/lib/valuation";
 
 type Metrics = {
   totalNetWorth: number;
@@ -23,20 +25,26 @@ type Props = {
   metrics: Metrics;
   snapshots: PlaceholderSnapshot[];
   holdings: PlaceholderHolding[];
+  reconciliationIssues: ReconciliationIssue[];
   usingPlaceholderData: boolean;
   /** When false, parent already renders DataModeBanner. Default true. */
   showMvpBanner?: boolean;
+  /** When false, parent already renders ReconciliationBanner. Default true. */
+  showReconciliationBanner?: boolean;
 };
 
 export function DashboardClient({
   metrics: serverMetrics,
   snapshots,
   holdings: serverHoldings,
+  reconciliationIssues: serverIssues,
   usingPlaceholderData,
   showMvpBanner = true,
+  showReconciliationBanner = true,
 }: Props) {
   const [metrics, setMetrics] = useState(serverMetrics);
   const [holdings, setHoldings] = useState(serverHoldings);
+  const [issues, setIssues] = useState(serverIssues);
   const [usingLocalLedger, setUsingLocalLedger] = useState(false);
 
   useEffect(() => {
@@ -47,6 +55,7 @@ export function DashboardClient({
       if (!local) {
         setMetrics(serverMetrics);
         setHoldings(serverHoldings);
+        setIssues(serverIssues);
         setUsingLocalLedger(false);
         return;
       }
@@ -56,12 +65,14 @@ export function DashboardClient({
         if (!local.holdings.length) {
           setMetrics(serverMetrics);
           setHoldings(serverHoldings);
+          setIssues(serverIssues);
           setUsingLocalLedger(false);
           return;
         }
       }
       setMetrics(local.metrics);
       setHoldings(local.holdings.length ? local.holdings : serverHoldings);
+      setIssues(local.reconciliationIssues);
       setUsingLocalLedger(true);
     };
 
@@ -72,7 +83,7 @@ export function DashboardClient({
       window.removeEventListener("wealthspace:ledger-saved", applyLocal);
       window.removeEventListener("storage", applyLocal);
     };
-  }, [serverHoldings, serverMetrics, usingPlaceholderData]);
+  }, [serverHoldings, serverIssues, serverMetrics, usingPlaceholderData]);
 
   return (
     <>
@@ -81,6 +92,8 @@ export function DashboardClient({
           usingPlaceholderData={usingPlaceholderData || usingLocalLedger}
         />
       )}
+
+      {showReconciliationBanner && <ReconciliationBanner issues={issues} />}
 
       {usingLocalLedger && (
         <p className="animate-fade-up rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

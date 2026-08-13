@@ -187,10 +187,21 @@ export function computeDashboardMetrics(
     .filter((a) => a.type === "REAL_ESTATE")
     .reduce((sum, a) => sum + a.balance, 0);
 
-  const equities = holdings.reduce(
-    (sum, h) => sum + h.quantity * h.currentPrice,
-    0
-  );
+  const holdingAccountIds = new Set(holdings.map((h) => h.accountId));
+
+  // BROKERAGE/CRYPTO balance counts only when the account has no lots
+  // (same double-count rule as lib/valuation.ts / snapshots).
+  const unmarkedBroker = accounts
+    .filter(
+      (a) =>
+        (a.type === "BROKERAGE" || a.type === "CRYPTO") &&
+        !holdingAccountIds.has(a.id)
+    )
+    .reduce((sum, a) => sum + a.balance, 0);
+
+  const equities =
+    holdings.reduce((sum, h) => sum + h.quantity * h.currentPrice, 0) +
+    unmarkedBroker;
 
   const totalInvested = equities + realEstate;
   const totalNetWorth = liquidCash + totalInvested;

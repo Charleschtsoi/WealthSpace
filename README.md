@@ -84,6 +84,19 @@ You can add your own AI key under **Settings** anytime. Without `DATABASE_URL`, 
 
 On demo data, the advisor asks you to acknowledge that first and labels the output as illustrative.
 
+## Account balance semantics
+
+WealthSpace keeps one valuation path in `lib/valuation.ts` (dashboard metrics, net-worth snapshots, and advisor JSON).
+
+| Account type | `Account.balance` means | Reconciliation |
+| ------------ | ----------------------- | -------------- |
+| **CASH** | Liquid cash (truth) | Never flagged |
+| **REAL_ESTATE** | Property mark | Never flagged |
+| **BROKERAGE / CRYPTO** with holdings | Total account equity mark (cash + securities) | Warning when \|balance − holdings MV\| exceeds \$1 or 0.5% |
+| **BROKERAGE / CRYPTO** without holdings | Sole valuation input (included in net worth) | No check |
+
+When holdings exist on a brokerage/crypto account, net worth uses holdings market value and **ignores** that account’s balance so portfolio MV is not double-counted. Mismatches surface as badges on the dashboard and Money workspace, and as `reconciliationIssues[]` on the advisor payload.
+
 ## Routes
 
 | Path | Description |
@@ -119,6 +132,7 @@ Date,Account,Ticker/Description,Amount,Currency
 | Weekly AI advisor and `/api/chat` | Done |
 | Demo data without a database | Done |
 | Postgres seed (Hang Seng / Firstrade / Property) | Done (`npm run db:setup`) |
+| Holdings↔account balance reconciliation | Done (warnings + advisor flags) |
 | Persist to Postgres | Optional (`DATABASE_URL`) |
 | Live OpenAI or Anthropic advice | BYOK or server env keys |
 

@@ -1,13 +1,19 @@
 import { Suspense } from "react";
 import { MoneyWorkspace } from "@/components/money/MoneyWorkspace";
+import { MoneyReconciliation } from "@/components/money/MoneyReconciliation";
 import { DataModeBanner } from "@/components/DataModeBanner";
 import { getDashboardData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function MoneyPage() {
-  const { preference, usingDemoData, isLive, databaseConfigured } =
-    await getDashboardData();
+  const {
+    preference,
+    usingDemoData,
+    isLive,
+    databaseConfigured,
+    reconciliationIssues,
+  } = await getDashboardData();
 
   return (
     <div className="space-y-8">
@@ -30,6 +36,7 @@ export default async function MoneyPage() {
         isLive={isLive}
         databaseConfigured={databaseConfigured}
       />
+      <MoneyReconciliation serverIssues={reconciliationIssues} />
       <Suspense
         fallback={
           <p className="text-sm text-muted-foreground">Loading workspace…</p>

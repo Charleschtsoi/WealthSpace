@@ -29,6 +29,7 @@ export default async function AdvisorPage() {
         isLive={portfolio.isLive}
         databaseConfigured={portfolio.databaseConfigured}
       />
+      {/* reconciliationIssues are embedded in portfolio JSON for the model */}
       <AdvisorChat
         portfolioJson={portfolioJson}
         usingDemoData={portfolio.usingDemoData}

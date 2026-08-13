@@ -5,6 +5,10 @@ import {
   type PlaceholderAccount,
   type PlaceholderHolding,
 } from "@/lib/placeholder-data";
+import {
+  reconcileLedger,
+  type ReconciliationIssue,
+} from "@/lib/valuation";
 
 /** Notify listeners (dashboard) that ledger data changed in this browser. */
 export function notifyLedgerSaved(): void {
@@ -16,6 +20,7 @@ export function readLocalDashboardOverride(): {
   accounts: PlaceholderAccount[];
   holdings: PlaceholderHolding[];
   metrics: ReturnType<typeof computeDashboardMetrics>;
+  reconciliationIssues: ReconciliationIssue[];
 } | null {
   if (typeof window === "undefined") return null;
 
@@ -48,6 +53,10 @@ export function readLocalDashboardOverride(): {
     accounts.length ? accounts : [],
     holdings
   );
+  const reconciliationIssues = reconcileLedger(
+    accounts.length ? accounts : [],
+    holdings
+  );
 
   // If we only have holdings locally, still surface equity MV in invested
   if (!accounts.length && holdings.length) {
@@ -55,6 +64,7 @@ export function readLocalDashboardOverride(): {
     return {
       accounts,
       holdings,
+      reconciliationIssues,
       metrics: {
         ...metrics,
         totalInvested: equities,
@@ -68,5 +78,5 @@ export function readLocalDashboardOverride(): {
     };
   }
 
-  return { accounts, holdings, metrics };
+  return { accounts, holdings, metrics, reconciliationIssues };
 }
