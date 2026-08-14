@@ -40,31 +40,26 @@ import {
   ingestCsvTransactions,
   updateAccountBalance,
 } from "@/lib/actions/upload";
+import {
+  applyCsvImportLocally,
+  previewCsvRows,
+} from "@/lib/csv-import-local";
+import {
+  CSV_IMPORT_TEMPLATE,
+  type CsvRawRow,
+} from "@/lib/csv-import";
 import { recordMoneyActivity } from "@/lib/money-activity";
 import { notifyLedgerSaved } from "@/lib/dashboard-local";
-
-type PreviewRow = {
-  Date: string;
-  Account: string;
-  "Ticker/Description": string;
-  Amount: string;
-  Currency: string;
-};
+import { cn } from "@/lib/utils";
 
 type AccountTypeOption = "CASH" | "BROKERAGE" | "CRYPTO" | "REAL_ESTATE";
-
-const SAMPLE_CSV = `Date,Account,Ticker/Description,Amount,Currency
-2026-08-01,Firstrade,BUY VOO,2500,USD
-2026-08-02,Hang Seng,Salary deposit,12000,USD
-2026-08-03,Firstrade,SELL AAPL,-1800,USD
-2026-08-04,Hang Seng,Rent withdrawal,-3200,USD`;
 
 type Props = {
   embedded?: boolean;
 };
 
 function downloadCsvTemplate() {
-  const blob = new Blob([SAMPLE_CSV + "\n"], {
+  const blob = new Blob([CSV_IMPORT_TEMPLATE + "\n"], {
     type: "text/csv;charset=utf-8",
   });
   const url = URL.createObjectURL(blob);
@@ -76,9 +71,10 @@ function downloadCsvTemplate() {
 }
 
 export function DataUploader({ embedded = false }: Props) {
-  const [preview, setPreview] = useState<PreviewRow[]>([]);
+  const [preview, setPreview] = useState<CsvRawRow[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<"ok" | "warn" | "error">("ok");
   const [isPending, startTransition] = useTransition();
 
   const [accountName, setAccountName] = useState("");
@@ -86,17 +82,29 @@ export function DataUploader({ embedded = false }: Props) {
   const [balance, setBalance] = useState("");
   const [currency, setCurrency] = useState("USD");
 
-  const canImport = preview.length > 0 && !isPending;
+  const enriched = useMemo(() => previewCsvRows(preview), [preview]);
+
+  const canImport = enriched.length > 0 && !isPending;
 
   const previewSummary = useMemo(() => {
-    const accounts = new Set(preview.map((r) => r.Account)).size;
-    return `${preview.length} rows · ${accounts} accounts`;
-  }, [preview]);
+    const accounts = new Set(enriched.map((r) => r.accountName)).size;
+    const dups = enriched.filter((r) => r.isDuplicate).length;
+    const buys = enriched.filter((r) => r.type === "BUY").length;
+    const sells = enriched.filter((r) => r.type === "SELL").length;
+    const parts = [
+      `${enriched.length} rows`,
+      `${accounts} accounts`,
+      `${buys} buys`,
+      `${sells} sells`,
+    ];
+    if (dups) parts.push(`${dups} duplicate(s)`);
+    return parts.join(" · ");
+  }, [enriched]);
 
   function handleFile(file: File) {
     setFileName(file.name);
     setStatus(null);
-    Papa.parse<PreviewRow>(file, {
+    Papa.parse<CsvRawRow>(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
@@ -105,10 +113,14 @@ export function DataUploader({ embedded = false }: Props) {
         );
         setPreview(rows);
         if (!rows.length) {
-          setStatus("No valid rows found. Expected columns: Date, Account, Ticker/Description, Amount, Currency.");
+          setStatusTone("error");
+          setStatus(
+            "No valid rows found. Expected columns: Date, Account, Ticker/Description, Amount, Currency (optional Quantity, Price)."
+          );
         }
       },
       error: (err) => {
+        setStatusTone("error");
         setStatus(`Parse error: ${err.message}`);
         setPreview([]);
       },
@@ -119,13 +131,32 @@ export function DataUploader({ embedded = false }: Props) {
     startTransition(async () => {
       const count = preview.length;
       const result = await ingestCsvTransactions(preview);
+
+      if (result.mode === "local" && result.localPlan) {
+        const local = applyCsvImportLocally(preview);
+        setStatusTone(local.success ? "ok" : "warn");
+        setStatus(local.message);
+        if (local.success) {
+          setPreview([]);
+          setFileName(null);
+          recordMoneyActivity(
+            "csv_import",
+            `Imported ${local.imported} CSV row(s) locally`,
+            fileName ?? "CSV upload"
+          );
+          notifyLedgerSaved();
+        }
+        return;
+      }
+
+      setStatusTone(result.success ? "ok" : "error");
       setStatus(result.message);
       if (result.success) {
         setPreview([]);
         setFileName(null);
         recordMoneyActivity(
           "csv_import",
-          `Imported ${count} CSV row(s)`,
+          `Imported ${result.count ?? count} CSV row(s)`,
           fileName ?? "CSV upload"
         );
         notifyLedgerSaved();
@@ -142,6 +173,7 @@ export function DataUploader({ embedded = false }: Props) {
         balance: Number(balance),
         currency,
       });
+      setStatusTone(result.success ? "ok" : "error");
       setStatus(result.message);
       if (result.success) {
         recordMoneyActivity(
@@ -157,11 +189,11 @@ export function DataUploader({ embedded = false }: Props) {
   }
 
   function loadSample() {
-    const parsed = Papa.parse<PreviewRow>(SAMPLE_CSV, {
+    const parsed = Papa.parse<CsvRawRow>(CSV_IMPORT_TEMPLATE, {
       header: true,
       skipEmptyLines: true,
     });
-    setPreview(parsed.data);
+    setPreview(parsed.data.filter((r) => r.Date && r.Account && r.Amount));
     setFileName("sample-transactions.csv");
     setStatus(null);
   }
@@ -176,10 +208,10 @@ export function DataUploader({ embedded = false }: Props) {
           </CardTitle>
           <CardDescription>
             Import statements with columns: Date, Account, Ticker/Description,
-            Amount, Currency.
+            Amount, Currency — optional Quantity / Price for holding fidelity.
             {embedded
-              ? " Part of the Money workspace — save sheet edits on Accounts / Holdings tabs."
-              : " Rows map to Account and Transaction records."}
+              ? " Part of the Money workspace — BUY/SELL updates Holdings; DEPOSIT/WITHDRAWAL adjust balances."
+              : " BUY/SELL rows update holdings; cash rows adjust account balances."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -193,7 +225,8 @@ export function DataUploader({ embedded = false }: Props) {
                 {fileName ?? "Drop a CSV or click to browse"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Bank / brokerage exports only — no live API required
+                Bank / brokerage exports only — works offline in this browser
+                when Postgres is unset
               </p>
             </div>
             <input
@@ -226,45 +259,85 @@ export function DataUploader({ embedded = false }: Props) {
                 <DialogHeader>
                   <DialogTitle>Expected CSV format</DialogTitle>
                   <DialogDescription>
-                    Header row is required. Amounts may be signed; negative
-                    values are treated as withdrawals or sells when the
-                    description does not specify otherwise.
+                    Header row is required. Type is inferred before import
+                    (BUY/SELL/DEPOSIT/WITHDRAWAL). Add Quantity (or{" "}
+                    <code className="text-xs">BUY VOO 4.73</code> in the
+                    description) so holdings update. Re-importing the same
+                    Date+Account+Type+Amount+Description is skipped.
                   </DialogDescription>
                 </DialogHeader>
                 <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-{SAMPLE_CSV}
+{CSV_IMPORT_TEMPLATE}
                 </pre>
               </DialogContent>
             </Dialog>
             <Button type="button" disabled={!canImport} onClick={onImport}>
-              {isPending ? "Importing…" : "Import to database"}
+              {isPending ? "Importing…" : "Import"}
             </Button>
           </div>
 
-          {preview.length > 0 && (
+          {enriched.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 Preview · {previewSummary}
               </p>
-              <div className="max-h-64 overflow-auto rounded-md border border-border">
+              <p className="text-xs text-muted-foreground">
+                Inferred types shown below. Duplicate rows are highlighted and
+                skipped on import.
+              </p>
+              <div className="max-h-72 overflow-auto rounded-md border border-border">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Account</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Ticker</TableHead>
+                      <TableHead>Qty</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead>CCY</TableHead>
+                      <TableHead>Δ bal</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {preview.slice(0, 20).map((row, idx) => (
-                      <TableRow key={`${row.Date}-${idx}`}>
-                        <TableCell>{row.Date}</TableCell>
-                        <TableCell>{row.Account}</TableCell>
-                        <TableCell>{row["Ticker/Description"]}</TableCell>
-                        <TableCell className="tabular-nums">{row.Amount}</TableCell>
-                        <TableCell>{row.Currency}</TableCell>
+                    {enriched.slice(0, 30).map((row, idx) => (
+                      <TableRow
+                        key={`${row.fingerprint}-${idx}`}
+                        className={cn(
+                          row.isDuplicate && "bg-amber-500/10",
+                          row.warning && !row.isDuplicate && "bg-muted/40"
+                        )}
+                      >
+                        <TableCell>{row.date}</TableCell>
+                        <TableCell>{row.accountName}</TableCell>
+                        <TableCell>
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium tracking-wide">
+                            {row.type}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {row.ticker ?? "—"}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-xs">
+                          {row.quantity != null ? row.quantity : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-w-[10rem] truncate text-xs">
+                            {row.description}
+                          </div>
+                          {row.warning && (
+                            <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+                              {row.warning}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {row.amountRaw}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-xs">
+                          {row.balanceDelta > 0 ? "+" : ""}
+                          {row.balanceDelta}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -348,7 +421,14 @@ export function DataUploader({ embedded = false }: Props) {
 
       {status && (
         <p
-          className="lg:col-span-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm"
+          className={cn(
+            "lg:col-span-2 rounded-md border px-4 py-3 text-sm",
+            statusTone === "ok" && "border-border bg-muted/40",
+            statusTone === "warn" &&
+              "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100",
+            statusTone === "error" &&
+              "border-destructive/40 bg-destructive/10 text-destructive"
+          )}
           role="status"
         >
           {status}

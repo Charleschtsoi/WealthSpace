@@ -4,84 +4,68 @@ import { revalidatePath } from "next/cache";
 import { AccountType, TransactionType } from "@prisma/client";
 import { getPrisma } from "@/lib/prisma";
 import { recordNetWorthSnapshot } from "@/lib/net-worth-snapshot";
+import {
+  applyHoldingTrade,
+  DB_UNAVAILABLE_IMPORT_HINT,
+  fingerprintsFromTransactions,
+  inferAccountTypeFromName,
+  planCsvImport,
+  type CsvRawRow,
+  type HoldingLotState,
+} from "@/lib/csv-import";
 
 export type ActionResult = {
   success: boolean;
   message: string;
   count?: number;
+  mode?: "database" | "local";
+  /** When mode=local, client should apply this plan to localStorage */
+  localPlan?: {
+    toImport: ReturnType<typeof planCsvImport>["toImport"];
+    duplicatesSkipped: number;
+  };
 };
 
-type CsvRow = {
-  Date: string;
-  Account: string;
-  "Ticker/Description": string;
-  Amount: string;
-  Currency: string;
-};
-
-function inferAccountType(name: string): AccountType {
-  const lower = name.toLowerCase();
-  if (
-    lower.includes("property") ||
-    lower.includes("real estate") ||
-    lower.includes("home")
-  ) {
-    return AccountType.REAL_ESTATE;
+function toPrismaAccountType(
+  type: ReturnType<typeof inferAccountTypeFromName>
+): AccountType {
+  switch (type) {
+    case "CASH":
+      return AccountType.CASH;
+    case "CRYPTO":
+      return AccountType.CRYPTO;
+    case "REAL_ESTATE":
+      return AccountType.REAL_ESTATE;
+    default:
+      return AccountType.BROKERAGE;
   }
-  if (
-    lower.includes("crypto") ||
-    lower.includes("binance") ||
-    lower.includes("coinbase") ||
-    lower.includes("okx")
-  ) {
-    return AccountType.CRYPTO;
-  }
-  if (
-    lower.includes("cash") ||
-    lower.includes("bank") ||
-    lower.includes("hang seng") ||
-    lower.includes("checking") ||
-    lower.includes("savings")
-  ) {
-    return AccountType.CASH;
-  }
-  return AccountType.BROKERAGE;
 }
 
-function inferTransactionType(
-  description: string,
-  amount: number
-): TransactionType {
-  const lower = description.toLowerCase();
-  if (lower.includes("buy") || lower.startsWith("b ")) {
-    return TransactionType.BUY;
+function toPrismaTxnType(type: string): TransactionType {
+  switch (type) {
+    case "BUY":
+      return TransactionType.BUY;
+    case "SELL":
+      return TransactionType.SELL;
+    case "WITHDRAWAL":
+      return TransactionType.WITHDRAWAL;
+    default:
+      return TransactionType.DEPOSIT;
   }
-  if (lower.includes("sell") || lower.startsWith("s ")) {
-    return TransactionType.SELL;
-  }
-  if (amount >= 0) return TransactionType.DEPOSIT;
-  return TransactionType.WITHDRAWAL;
 }
 
-function parseAmount(raw: string): number {
-  const cleaned = raw.replace(/[$,\s]/g, "");
-  const value = Number(cleaned);
-  if (Number.isNaN(value)) {
-    throw new Error(`Invalid amount: ${raw}`);
-  }
-  return value;
-}
-
-function parseDate(raw: string): Date {
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid date: ${raw}`);
-  }
-  return date;
+function revalidateImportPaths() {
+  revalidatePath("/");
+  revalidatePath("/money");
+  revalidatePath("/transactions");
+  revalidatePath("/holdings");
+  revalidatePath("/accounts");
+  revalidatePath("/upload");
+  revalidatePath("/advisor");
 }
 
 export async function ingestCsvTransactions(
-  rows: CsvRow[]
+  rows: CsvRawRow[]
 ): Promise<ActionResult> {
   if (!rows.length) {
     return { success: false, message: "No rows found in CSV." };
@@ -89,58 +73,188 @@ export async function ingestCsvTransactions(
 
   const prisma = getPrisma();
   if (!prisma) {
+    const plan = planCsvImport(rows, []);
+    if (!plan.toImport.length && plan.duplicates.length) {
+      return {
+        success: false,
+        mode: "local",
+        message:
+          "Every row looks like a duplicate of itself in this file. Adjust dates/amounts or clear the file duplicates, then try again.",
+        localPlan: {
+          toImport: [],
+          duplicatesSkipped: plan.duplicates.length,
+        },
+      };
+    }
     return {
-      success: false,
-      message:
-        "DATABASE_URL is not configured. Preview the CSV here, then add a Postgres URL in Vercel to persist imports.",
+      success: true,
+      mode: "local",
+      count: plan.toImport.length,
+      message: `${DB_UNAVAILABLE_IMPORT_HINT} Ready to apply ${plan.toImport.length} row(s) locally${
+        plan.duplicates.length
+          ? ` (${plan.duplicates.length} duplicate(s) skipped)`
+          : ""
+      }.`,
+      localPlan: {
+        toImport: plan.toImport,
+        duplicatesSkipped: plan.duplicates.length,
+      },
     };
   }
 
   try {
+    const existingTxns = await prisma.transaction.findMany({
+      include: { account: true },
+    });
+    const existingFingerprints = fingerprintsFromTransactions(
+      existingTxns.map((t) => ({
+        date: t.date.toISOString().slice(0, 10),
+        accountName: t.account.name,
+        type: t.type,
+        amount: Number(t.amount),
+        description: t.description,
+      }))
+    );
+
+    const plan = planCsvImport(rows, existingFingerprints);
+
+    if (plan.invalid.length && !plan.toImport.length && !plan.duplicates.length) {
+      return {
+        success: false,
+        mode: "database",
+        message: `No valid rows. First error: ${plan.invalid[0].error}`,
+      };
+    }
+
+    if (!plan.toImport.length) {
+      return {
+        success: false,
+        mode: "database",
+        message: plan.duplicates.length
+          ? `Skipped ${plan.duplicates.length} duplicate row(s) — nothing new to import. Re-import is a no-op when Date+Account+Type+Amount+Description already exist.`
+          : "No valid rows to import.",
+      };
+    }
+
+    const accounts = await prisma.account.findMany({
+      include: { holdings: true },
+    });
+    const accountByName = new Map(
+      accounts.map((a) => [a.name.trim().toLowerCase(), a])
+    );
+
+    const lots = new Map<string, HoldingLotState>();
+    for (const account of accounts) {
+      for (const h of account.holdings) {
+        const ticker = h.ticker.toUpperCase();
+        lots.set(`${account.name.trim().toLowerCase()}|${ticker}`, {
+          accountName: account.name,
+          ticker,
+          quantity: Number(h.quantity),
+          averagePrice: Number(h.averagePrice),
+          currentPrice: Number(h.currentPrice),
+          currency: h.currency || "USD",
+        });
+      }
+    }
+
     let imported = 0;
+    let holdingsTouched = 0;
 
-    for (const row of rows) {
-      const accountName = row.Account?.trim();
-      const description = row["Ticker/Description"]?.trim() || "Imported";
-      const currency = row.Currency?.trim() || "USD";
-      const amount = parseAmount(row.Amount);
-      const date = parseDate(row.Date);
-
-      if (!accountName) continue;
-
-      let account = await prisma.account.findFirst({
-        where: { name: accountName },
-      });
+    for (const row of plan.toImport) {
+      const key = row.accountName.trim().toLowerCase();
+      let account = accountByName.get(key);
+      const date = new Date(row.date);
 
       if (account) {
         account = await prisma.account.update({
           where: { id: account.id },
           data: {
             lastUpdated: date,
-            balance: { increment: amount },
+            balance: { increment: row.balanceDelta },
           },
+          include: { holdings: true },
         });
+        accountByName.set(key, account);
       } else {
         account = await prisma.account.create({
           data: {
-            name: accountName,
-            type: inferAccountType(accountName),
-            balance: Math.abs(amount),
-            currency,
+            name: row.accountName,
+            type: toPrismaAccountType(inferAccountTypeFromName(row.accountName)),
+            balance: Math.max(0, row.balanceDelta),
+            currency: row.currency,
             lastUpdated: date,
           },
+          include: { holdings: true },
         });
+        accountByName.set(key, account);
       }
 
       await prisma.transaction.create({
         data: {
           accountId: account.id,
-          type: inferTransactionType(description, amount),
-          amount: Math.abs(amount),
+          type: toPrismaTxnType(row.type),
+          amount: row.amount,
           date,
-          description,
+          description: row.description,
         },
       });
+
+      if (
+        (row.type === "BUY" || row.type === "SELL") &&
+        row.ticker &&
+        row.quantity != null &&
+        row.price != null &&
+        row.holdingAction !== "none"
+      ) {
+        const mutation = applyHoldingTrade(lots, {
+          accountName: account.name,
+          ticker: row.ticker,
+          type: row.type,
+          quantity: row.quantity,
+          price: row.price,
+          currency: row.currency,
+        });
+
+        if (mutation) {
+          const existingLot = await prisma.assetHolding.findFirst({
+            where: {
+              accountId: account.id,
+              ticker: mutation.ticker,
+            },
+          });
+
+          if (mutation.remove) {
+            if (existingLot) {
+              await prisma.assetHolding.delete({ where: { id: existingLot.id } });
+              holdingsTouched += 1;
+            }
+          } else if (existingLot) {
+            await prisma.assetHolding.update({
+              where: { id: existingLot.id },
+              data: {
+                quantity: mutation.quantity,
+                averagePrice: mutation.averagePrice,
+                currentPrice: mutation.currentPrice,
+                currency: mutation.currency,
+              },
+            });
+            holdingsTouched += 1;
+          } else {
+            await prisma.assetHolding.create({
+              data: {
+                accountId: account.id,
+                ticker: mutation.ticker,
+                quantity: mutation.quantity,
+                averagePrice: mutation.averagePrice,
+                currentPrice: mutation.currentPrice,
+                currency: mutation.currency,
+              },
+            });
+            holdingsTouched += 1;
+          }
+        }
+      }
 
       imported += 1;
     }
@@ -149,23 +263,32 @@ export async function ingestCsvTransactions(
       await recordNetWorthSnapshot(prisma);
     }
 
-    revalidatePath("/");
-    revalidatePath("/money");
-    revalidatePath("/transactions");
-    revalidatePath("/upload");
-    revalidatePath("/advisor");
+    revalidateImportPaths();
+
+    const dupNote = plan.duplicates.length
+      ? ` Skipped ${plan.duplicates.length} duplicate(s).`
+      : "";
+    const holdNote =
+      holdingsTouched > 0
+        ? ` Updated ${holdingsTouched} holding lot(s).`
+        : "";
 
     return {
       success: true,
-      message: `Imported ${imported} transaction(s).`,
+      mode: "database",
+      message: `Imported ${imported} transaction(s).${holdNote}${dupNote}`,
       count: imported,
     };
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
-        : "Failed to import CSV. Ensure DATABASE_URL is configured.";
-    return { success: false, message };
+        : "Failed to import CSV. Check DATABASE_URL and CSV columns (Date, Account, Ticker/Description, Amount, Currency).";
+    return {
+      success: false,
+      mode: "database",
+      message: `${message} If Postgres is unreachable, remove DATABASE_URL temporarily to use browser-local import.`,
+    };
   }
 }
 
@@ -188,8 +311,9 @@ export async function updateAccountBalance(input: {
   if (!prisma) {
     return {
       success: false,
+      mode: "local",
       message:
-        "DATABASE_URL is not configured. Add a Postgres URL in Vercel to save balances.",
+        "DATABASE_URL is not configured. Update the balance on Money → Accounts (spreadsheet), or add a Postgres URL in Vercel to save here.",
     };
   }
 
@@ -222,20 +346,18 @@ export async function updateAccountBalance(input: {
 
     await recordNetWorthSnapshot(prisma);
 
-    revalidatePath("/");
-    revalidatePath("/money");
-    revalidatePath("/upload");
-    revalidatePath("/advisor");
+    revalidateImportPaths();
 
     return {
       success: true,
+      mode: "database",
       message: `Updated balance for ${accountName.trim()}.`,
     };
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
-        : "Failed to update balance. Ensure DATABASE_URL is configured.";
-    return { success: false, message };
+        : "Failed to update balance. Ensure DATABASE_URL points at a reachable Postgres instance.";
+    return { success: false, mode: "database", message };
   }
 }
