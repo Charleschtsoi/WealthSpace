@@ -9,6 +9,7 @@ export default async function DashboardPage() {
     metrics,
     snapshots,
     holdings,
+    targetAllocation,
     preference,
     usingDemoData,
     usingPlaceholderData,
@@ -44,6 +45,7 @@ export default async function DashboardPage() {
         metrics={metrics}
         snapshots={snapshots}
         holdings={holdings}
+        targetAllocation={targetAllocation}
         usingPlaceholderData={usingPlaceholderData}
         showMvpBanner={false}
       />

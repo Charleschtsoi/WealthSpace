@@ -5,6 +5,12 @@ import {
   type PlaceholderAccount,
   type PlaceholderHolding,
 } from "@/lib/placeholder-data";
+import {
+  computeTargetAllocation,
+  loadLocalAllocationPolicy,
+  resolveAllocationPolicy,
+  type TargetAllocationReport,
+} from "@/lib/target-allocation";
 
 /** Notify listeners (dashboard) that ledger data changed in this browser. */
 export function notifyLedgerSaved(): void {
@@ -12,16 +18,24 @@ export function notifyLedgerSaved(): void {
   window.dispatchEvent(new CustomEvent("wealthspace:ledger-saved"));
 }
 
+function policyForClient() {
+  return resolveAllocationPolicy(loadLocalAllocationPolicy());
+}
+
 export function readLocalDashboardOverride(): {
   accounts: PlaceholderAccount[];
   holdings: PlaceholderHolding[];
   metrics: ReturnType<typeof computeDashboardMetrics>;
+  targetAllocation: TargetAllocationReport;
 } | null {
   if (typeof window === "undefined") return null;
 
   const localAccounts = loadLocalAccounts();
   const localHoldings = loadLocalHoldings();
-  if (!localAccounts?.length && !localHoldings?.length) return null;
+  const localPolicy = loadLocalAllocationPolicy();
+  if (!localAccounts?.length && !localHoldings?.length && !localPolicy) {
+    return null;
+  }
 
   const accounts: PlaceholderAccount[] = (localAccounts ?? []).map((a) => ({
     id: a.id,
@@ -43,11 +57,14 @@ export function readLocalDashboardOverride(): {
     accountName: h.accountName,
   }));
 
+  const policy = policyForClient();
+
   // Prefer local accounts; if only holdings exist, keep empty cash/property from none
   const metrics = computeDashboardMetrics(
     accounts.length ? accounts : [],
     holdings
   );
+  const targetAllocation = computeTargetAllocation(holdings, policy);
 
   // If we only have holdings locally, still surface equity MV in invested
   if (!accounts.length && holdings.length) {
@@ -55,6 +72,7 @@ export function readLocalDashboardOverride(): {
     return {
       accounts,
       holdings,
+      targetAllocation,
       metrics: {
         ...metrics,
         totalInvested: equities,
@@ -68,5 +86,15 @@ export function readLocalDashboardOverride(): {
     };
   }
 
-  return { accounts, holdings, metrics };
+  // Policy-only override (no local ledger): caller may merge onto server holdings
+  if (!accounts.length && !holdings.length && localPolicy) {
+    return {
+      accounts: [],
+      holdings: [],
+      metrics,
+      targetAllocation,
+    };
+  }
+
+  return { accounts, holdings, metrics, targetAllocation };
 }

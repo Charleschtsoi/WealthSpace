@@ -1,3 +1,4 @@
+import { AllocationPolicySettings } from "@/components/settings/AllocationPolicySettings";
 import { ByokSettingsForm } from "@/components/settings/ByokSettingsForm";
 import { DataModeSettings } from "@/components/settings/DataModeSettings";
 import { getDataModeMeta } from "@/lib/actions/demo-mode";
@@ -17,14 +18,16 @@ export default async function SettingsPage() {
           AI &amp; preferences
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-          Configure Bring Your Own Key (BYOK) and choose demo vs personal ledger
-          mode. Keys stay in this browser unless you later add server-side auth.
+          Configure Bring Your Own Key (BYOK), target allocation policy, and
+          demo vs personal ledger mode. Keys and policy stay in this browser
+          unless you later add server-side auth.
         </p>
       </header>
       <DataModeSettings
         preference={mode.preference}
         databaseConfigured={mode.databaseConfigured}
       />
+      <AllocationPolicySettings />
       <ByokSettingsForm />
     </div>
   );
