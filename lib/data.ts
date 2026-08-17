@@ -14,6 +14,11 @@ import {
   type PlaceholderHolding,
   type PlaceholderSnapshot,
 } from "@/lib/placeholder-data";
+import {
+  DEFAULT_ALLOCATION_POLICY,
+  computeTargetAllocation,
+  policyToAdvisorShape,
+} from "@/lib/target-allocation";
 
 function toNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -198,6 +203,10 @@ export async function getDashboardData() {
   const holdings = holdingsResult.data;
   const snapshots = snapshotsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
+  const targetAllocation = computeTargetAllocation(
+    holdings,
+    DEFAULT_ALLOCATION_POLICY
+  );
   const preference = accountsResult.preference;
   const usingPlaceholderData = !fromDb && preference !== "personal";
   const usingDemoData = usingPlaceholderData;
@@ -208,6 +217,7 @@ export async function getDashboardData() {
     holdings,
     snapshots,
     metrics,
+    targetAllocation,
     preference,
     databaseConfigured,
     usingPlaceholderData,
@@ -224,6 +234,10 @@ export async function getPortfolioForAdvisor() {
   const accounts = accountsResult.data;
   const holdings = holdingsResult.data;
   const metrics = computeDashboardMetrics(accounts, holdings);
+  const targetAllocation = computeTargetAllocation(
+    holdings,
+    DEFAULT_ALLOCATION_POLICY
+  );
   const fromDb = accountsResult.fromDb && holdingsResult.fromDb;
   const preference = accountsResult.preference;
   const usingPlaceholderData = !fromDb && preference !== "personal";
@@ -233,14 +247,7 @@ export async function getPortfolioForAdvisor() {
       age: 38,
       occupation: "IT Project Manager",
       retirementAge: 55,
-      targetAllocation: {
-        broadIndex: 0.8,
-        individualTech: 0.2,
-        preferredTickers: {
-          broadIndex: ["VOO", "VXUS"],
-          individualTech: ["NVDA", "META"],
-        },
-      },
+      targetAllocation: policyToAdvisorShape(DEFAULT_ALLOCATION_POLICY),
     },
     accounts,
     holdings: holdings.map((h) => ({
@@ -251,6 +258,7 @@ export async function getPortfolioForAdvisor() {
         h.quantity * h.currentPrice - h.quantity * h.averagePrice,
     })),
     summary: metrics,
+    allocationDrift: targetAllocation,
     preference,
     usingPlaceholderData,
     usingDemoData: usingPlaceholderData,
