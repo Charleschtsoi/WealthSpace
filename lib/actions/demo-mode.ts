@@ -23,7 +23,8 @@ function revalidateLedgerPaths() {
 }
 
 export async function getDataModePreference(): Promise<DataMode> {
-  return parseDataMode(cookies().get(DATA_MODE_COOKIE)?.value);
+  const cookieStore = await cookies();
+  return parseDataMode(cookieStore.get(DATA_MODE_COOKIE)?.value);
 }
 
 export async function getDataModeMeta(): Promise<{
@@ -40,7 +41,8 @@ export async function getDataModeMeta(): Promise<{
 export async function setDataModePreference(
   mode: DataMode
 ): Promise<{ success: true; preference: DataMode }> {
-  cookies().set(DATA_MODE_COOKIE, mode, {
+  const cookieStore = await cookies();
+  cookieStore.set(DATA_MODE_COOKIE, mode, {
     path: "/",
     maxAge: COOKIE_MAX_AGE,
     sameSite: "lax",

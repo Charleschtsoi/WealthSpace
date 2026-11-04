@@ -24,9 +24,10 @@ function toNumber(value: unknown): number {
   return Number(value);
 }
 
-function readDataModePreference(): DataMode {
+async function readDataModePreference(): Promise<DataMode> {
   try {
-    return parseDataMode(cookies().get(DATA_MODE_COOKIE)?.value);
+    const cookieStore = await cookies();
+    return parseDataMode(cookieStore.get(DATA_MODE_COOKIE)?.value);
   } catch {
     // Outside of a request context (e.g. build), default to demo.
     return "demo";
@@ -42,7 +43,7 @@ export async function getAccounts(): Promise<{
   fromDb: boolean;
   preference: DataMode;
 }> {
-  const preference = readDataModePreference();
+  const preference = await readDataModePreference();
   const prisma = getPrisma();
   if (!prisma) {
     return {
@@ -89,7 +90,7 @@ export async function getHoldings(): Promise<{
   fromDb: boolean;
   preference: DataMode;
 }> {
-  const preference = readDataModePreference();
+  const preference = await readDataModePreference();
   const prisma = getPrisma();
   if (!prisma) {
     return {
@@ -139,7 +140,7 @@ export async function getNetWorthSnapshots(): Promise<{
   fromDb: boolean;
   preference: DataMode;
 }> {
-  const preference = readDataModePreference();
+  const preference = await readDataModePreference();
   const prisma = getPrisma();
   if (!prisma) {
     return {

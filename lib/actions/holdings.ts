@@ -24,7 +24,8 @@ export async function getAccountOptionsForHoldings(): Promise<{
   fromDb: boolean;
   preference: "demo" | "personal";
 }> {
-  const preference = parseDataMode(cookies().get(DATA_MODE_COOKIE)?.value);
+  const cookieStore = await cookies();
+  const preference = parseDataMode(cookieStore.get(DATA_MODE_COOKIE)?.value);
   const prisma = getPrisma();
   if (prisma) {
     try {
